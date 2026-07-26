@@ -4,7 +4,7 @@
 //! tree node (e.g. open workspace, reveal in file manager, copy path). Selecting an action fires its
 //! corresponding [`Intent`] and closes the overlay.
 
-use super::{Effects, Modal};
+use super::{Drag, Effects, Modal};
 use crate::intent::Intent;
 use crate::presenter::{ContextMenuItemRowView, ContextMenuView};
 use crate::tree::NodeKind;
@@ -254,16 +254,21 @@ impl super::Controller {
                         if let Some(item) = menu.items.get(idx) {
                             let intent = item.intent;
                             self.modal = Modal::None;
+                            // Suppress the subsequent MouseUp so it doesn't trigger a click on
+                            // the tree/content beneath the now-closed menu.
+                            self.drag = Some(Drag::ModalConsumed);
                             return self.handle(intent);
                         }
                     }
                 }
-                // Click outside menu → close it
+                // Click outside menu → close it; suppress the Up as well.
                 self.modal = Modal::None;
+                self.drag = Some(Drag::ModalConsumed);
                 Effects::redraw()
             }
             MouseEventKind::Down(_) => {
                 self.modal = Modal::None;
+                self.drag = Some(Drag::ModalConsumed);
                 Effects::redraw()
             }
             _ => Effects::noop(),

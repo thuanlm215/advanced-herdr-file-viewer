@@ -3223,6 +3223,9 @@ enum Drag {
     /// in `handle_line_select_mouse`, on the modal's state) or ambient (handled in
     /// `handle_column_mouse`, on `content_selection`; the release auto-copies).
     ContentSelect,
+    /// A modal (e.g. context menu) consumed the mouse-down; suppress the matching mouse-up so it
+    /// does not trigger a click on the tree/content beneath.
+    ModalConsumed,
 }
 
 /// Whether a path names a markdown file (by extension, case-insensitive).
