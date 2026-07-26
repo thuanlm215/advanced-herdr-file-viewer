@@ -22,6 +22,7 @@
 //! the type definitions, construction, the intent/poll/render core, and tree-navigation intents.
 
 mod annotation;
+mod context_menu;
 mod finder;
 mod git_apply;
 mod help;
@@ -31,6 +32,7 @@ mod mouse;
 mod picker;
 
 use crate::annotation::AnnotationStore;
+use crate::controller::context_menu::ContextMenuState;
 use crate::finder::FinderState;
 use crate::git::{Baseline, Status};
 use crate::help::{HelpSection, HelpSectionState, HelpState};
@@ -405,6 +407,7 @@ enum Modal {
     LineSelect(LineSelectState),
     Annotations(AnnotationListState),
     AnnotationEditor(AnnotationEditorState),
+    ContextMenu(ContextMenuState),
     /// The confirm raised when an action would discard unexported annotations. Carries what to do
     /// once the user decides; the store it guards is the controller's.
     DiscardConfirm(DiscardAction),
@@ -526,6 +529,18 @@ impl Modal {
     fn annotation_editor_mut(&mut self) -> Option<&mut AnnotationEditorState> {
         match self {
             Modal::AnnotationEditor(s) => Some(s),
+            _ => None,
+        }
+    }
+    pub(crate) fn context_menu(&self) -> Option<&ContextMenuState> {
+        match self {
+            Modal::ContextMenu(s) => Some(s),
+            _ => None,
+        }
+    }
+    pub(crate) fn context_menu_mut(&mut self) -> Option<&mut ContextMenuState> {
+        match self {
+            Modal::ContextMenu(s) => Some(s),
             _ => None,
         }
     }
@@ -1740,6 +1755,7 @@ impl Controller {
                     }
                 }),
             help: self.help_view(),
+            context_menu: self.context_menu_view(),
         }
     }
 
@@ -1850,6 +1866,9 @@ impl Controller {
         if self.modal.help().is_some() {
             return Effects::noop();
         }
+        if self.modal.context_menu().is_some() {
+            return Effects::noop();
+        }
         // Raw-key modals own every key. Defensive guards prevent a direct/test caller from
         // leaking a globally-decoded intent to the tree or opening a second modal beneath one.
         if self.modal.line_select().is_some()
@@ -1914,6 +1933,8 @@ impl Controller {
                     }
                 }
             },
+            Intent::OpenWorkspace => self.open_workspace(),
+            Intent::ShowContextMenu => self.show_context_menu(),
             Intent::ShowHelp => self.open_help(),
             Intent::Close => self.close_or_unzoom(),
         }

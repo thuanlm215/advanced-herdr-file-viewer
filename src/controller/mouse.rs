@@ -30,6 +30,7 @@ impl Controller {
             Modal::LineSelect(_) => self.handle_line_select_mouse(ev),
             Modal::Help(_) => self.handle_help_mouse(ev),
             Modal::Finder(_) => self.handle_finder_mouse(ev),
+            Modal::ContextMenu(_) => self.handle_context_menu_mouse(ev),
             Modal::None => self.handle_column_mouse(ev),
         }
     }
@@ -226,6 +227,17 @@ impl Controller {
                 }
                 None => self.handle_click(col, row),
             },
+            MouseEventKind::Down(MouseButton::Right) => {
+                if let MouseRegion::TreeRow(idx) = self.hit_test(col, row)
+                    && idx < self.tree.visible_nodes().len()
+                {
+                    self.focus = Focus::Tree;
+                    self.tree.set_cursor(idx);
+                    self.dispatch_render();
+                    return self.show_context_menu_at(col, row);
+                }
+                Effects::noop()
+            }
             _ => Effects::noop(),
         }
     }

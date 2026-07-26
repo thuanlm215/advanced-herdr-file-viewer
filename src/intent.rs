@@ -67,6 +67,11 @@ pub enum Intent {
     /// Copy the selected node's **absolute** path to the clipboard. Read-only, like
     /// [`Intent::CopyRepoPath`] — no file contents are touched.
     CopyAbsPath,
+    /// Open a new herdr workspace in the selected directory (`s`). Read-only w.r.t. files and git
+    /// — invokes `herdr workspace create --cwd <path> --focus`.
+    OpenWorkspace,
+    /// Open the context menu of actions for the selected tree node (`m`). Read-only overlay.
+    ShowContextMenu,
     /// Open the annotation editor for the selected file. Saving changes session-only in-memory
     /// annotation state; it never writes a file or mutates git.
     AddAnnotation,
@@ -141,7 +146,7 @@ pub enum Intent {
 impl Intent {
     /// Every intent variant — lets the dispatcher and tests enumerate the closed set so
     /// keyboard-completeness (AC-18) and the no-file/git-mutation invariant (AC-N3) stay checkable.
-    pub const ALL: [Intent; 37] = [
+    pub const ALL: [Intent; 39] = [
         Intent::NavUp,
         Intent::NavDown,
         Intent::Expand,
@@ -177,6 +182,8 @@ impl Intent {
         Intent::PrevMatch,
         Intent::TreeScrollLeft,
         Intent::TreeScrollRight,
+        Intent::OpenWorkspace,
+        Intent::ShowContextMenu,
         Intent::ShowHelp,
         Intent::Close,
     ];
@@ -229,6 +236,8 @@ mod tests {
                 | Intent::PrevMatch
                 | Intent::TreeScrollLeft
                 | Intent::TreeScrollRight
+                | Intent::OpenWorkspace
+                | Intent::ShowContextMenu
                 | Intent::ShowHelp
                 | Intent::Close => (false, false),
             };
@@ -303,11 +312,23 @@ mod tests {
     }
 
     #[test]
-    fn all_length_is_37() {
+    fn all_length_is_39() {
         assert_eq!(
             Intent::ALL.len(),
-            37,
-            "Intent::ALL must have exactly 37 variants"
+            39,
+            "Intent::ALL must have exactly 39 variants"
+        );
+    }
+
+    #[test]
+    fn open_workspace_and_context_menu_are_in_all() {
+        assert!(
+            Intent::ALL.contains(&Intent::OpenWorkspace),
+            "Intent::ALL must contain OpenWorkspace"
+        );
+        assert!(
+            Intent::ALL.contains(&Intent::ShowContextMenu),
+            "Intent::ALL must contain ShowContextMenu"
         );
     }
 

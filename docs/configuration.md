@@ -165,6 +165,8 @@ customized).
 | | `reveal_in_file_manager` | `R` | Reveal the selected entry in the OS file manager |
 | | `copy_repo_path` | `y` | Copy the selected node's repo-relative path to the clipboard |
 | | `copy_abs_path` | `Y` | Copy the selected node's absolute path to the clipboard |
+| | `open_workspace` | `s` | Open a new herdr workspace in the selected directory |
+| | `show_context_menu` | `m` | Open the context menu for the selected tree node |
 | **Annotations** | `add_annotation` | `a` | Add an in-memory annotation for the selected file |
 | | `show_annotations` | `A` | Open the session annotation overview |
 | **Search & jump** | `open_finder` | `f` | Open the go-to-file fuzzy finder |

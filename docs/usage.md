@@ -325,6 +325,6 @@ off — see [install & updating](install.md#updating) and the `update_check`
 ## Using the mouse
 
 The mouse is additive and on by default: click a tree row to select it, double-click to
-open/expand, use the wheel to scroll, drag a scrollbar or the divider, and drag over content text to
+open/expand, right-click any tree row to open a popup context menu of actions (including opening a new herdr workspace in that directory), use the wheel to scroll, drag a scrollbar or the divider, and drag over content text to
 select-and-copy without any mode. The full gesture table is in the [keys reference](keys.md#mouse).
 `Shift`+drag is deliberately left to your terminal's own native selection.

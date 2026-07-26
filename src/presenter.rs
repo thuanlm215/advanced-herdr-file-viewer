@@ -163,6 +163,8 @@ pub struct ViewState {
     /// When `Some`, the in-app help overlay is drawn on top of everything else (AC-1, AC-5).
     /// `None` ⇒ no overlay. Drawn last in [`draw`] so it sits above the picker and finder.
     pub help: Option<HelpView>,
+    /// When `Some`, the context menu popup overlay is drawn on top of everything else.
+    pub context_menu: Option<ContextMenuView>,
 }
 
 /// The worktree picker's draw model (an owned snapshot of the controller's picker state, so
@@ -321,6 +323,21 @@ pub struct DiscardConfirmView {
     pub rows: Vec<AnnotationRowView>,
     pub verb: &'static str,
     pub proceed_key: &'static str,
+}
+
+/// One row in the context menu overlay.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContextMenuItemRowView {
+    pub label: String,
+    pub shortcut: String,
+}
+
+/// The context menu popup overlay draw model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContextMenuView {
+    pub items: Vec<ContextMenuItemRowView>,
+    pub cursor: usize,
+    pub anchor: (u16, u16),
 }
 
 /// The help overlay's draw model — an owned, borrow-free snapshot of the controller's
@@ -1544,6 +1561,9 @@ pub fn draw(frame: &mut Frame, state: &ViewState) -> (u16, u16) {
     if let Some(help) = &state.help {
         draw_help_overlay(frame, frame.area(), help);
     }
+    if let Some(menu) = &state.context_menu {
+        draw_context_menu_overlay(frame, frame.area(), menu);
+    }
     dims
 }
 
@@ -2733,6 +2753,62 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, help: &HelpView) {
             );
         }
     }
+}
+
+/// Layout and draw the context menu overlay at `menu.anchor`, clamped to `area`.
+fn draw_context_menu_overlay(frame: &mut Frame, area: Rect, menu: &ContextMenuView) {
+    if menu.items.is_empty() || area.width == 0 || area.height == 0 {
+        return;
+    }
+    let max_label = menu
+        .items
+        .iter()
+        .map(|i| Line::from(format!("{} [{}]", i.label, i.shortcut)).width() + 4)
+        .max()
+        .unwrap_or(24) as u16;
+    let width = max_label.max(24).min(area.width);
+    let height = (menu.items.len() as u16 + 2).min(area.height);
+
+    let x = menu.anchor.0.min(area.width.saturating_sub(width));
+    let y = menu.anchor.1.min(area.height.saturating_sub(height));
+    let rect = Rect::new(x, y, width, height);
+
+    frame.render_widget(Clear, rect);
+
+    let rows: Vec<Line> = menu
+        .items
+        .iter()
+        .enumerate()
+        .map(|(idx, item)| {
+            let selected = idx == menu.cursor;
+            let style = if selected {
+                Style::new().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::new()
+            };
+            let shortcut_w = Line::from(item.shortcut.as_str()).width();
+            let left_w = width.saturating_sub(4 + shortcut_w as u16) as usize;
+            let label_pad = format!("{:<width$}", item.label, width = left_w);
+            Line::from(vec![
+                Span::styled(format!(" {label_pad}"), style),
+                Span::styled(
+                    format!(" [{}] ", item.shortcut),
+                    if selected {
+                        style
+                    } else {
+                        Style::new().add_modifier(Modifier::DIM)
+                    },
+                ),
+            ])
+        })
+        .collect();
+
+    let block = modal_frame()
+        .title_top(Line::from(" Actions "))
+        .border_style(modal_border_style());
+
+    let p = Paragraph::new(rows).block(block);
+    frame.render_widget(p, rect);
 }
 
 #[cfg(test)]

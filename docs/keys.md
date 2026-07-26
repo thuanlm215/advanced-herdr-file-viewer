@@ -34,6 +34,8 @@ is additive and on by default.
 | `n` / `N` (Shift+`n`) | After a committed search, jump to the **next** / **previous** match and scroll it into view, wrapping at the ends with a notice |
 | `y` | Copy the selected file's **repo-relative** path to the clipboard (e.g. `src/app.rs`) |
 | `Y` | Copy the selected file's **absolute** path to the clipboard |
+| `s` | **Open workspace**: open a new herdr workspace in the selected directory |
+| `m` | **Show context menu**: open a popup menu of actions for the selected tree node (`↑`/`↓` move, `Enter` selects, `Esc` closes; can also be opened by right-clicking on a tree item) |
 | `a` | **Add annotation**: open the annotation editor for the selected file (`←`/`→` or `Home`/`End` move the text cursor, `Enter` saves, `Esc` cancels). Annotations live only for this viewer session and never modify the file |
 | `A` (Shift+`a`) | **Show annotations**: open the session overview; fixed keys `j`/`k` or `↑`/`↓` move, `Enter`/`e` edits, `d` deletes one, `D` (Shift+`d`) clears all immediately, `y` copies all, and `Esc`/`q` closes |
 | `Tab` | Move focus between the tree and content columns |
@@ -115,6 +117,7 @@ The viewer is keyboard-first; the mouse is additive and on by default:
 | Gesture | Action |
 | --- | --- |
 | **Click** a tree row | Select it (focus the tree) |
+| **Right-click** a tree row | Open the context menu of actions for that node (including open workspace, reveal in file manager, copy path) |
 | **Double-click** a folder | Expand / collapse it (same as `Enter`) |
 | **Double-click** a file | Open it in **zoom mode**: content full-screen (same as `Enter`); the editor is the `e` key |
 | **Double-click** the content title | Toggle zoom: hide or show the tree (same as `z`). The filename sits on the content pane’s top border, so this works even when the tree is already hidden |

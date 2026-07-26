@@ -302,6 +302,19 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                     }
                     dirty |= fx.redraw;
                 }
+                Event::Key(key)
+                    if key.kind == KeyEventKind::Press && controller.context_menu_open() =>
+                {
+                    let fx = controller.handle_context_menu_key(key);
+                    if fx.clear {
+                        let _ = terminal.clear();
+                        dirty = true;
+                    }
+                    if fx.quit {
+                        return Ok(());
+                    }
+                    dirty |= fx.redraw;
+                }
                 // While line-select mode is active, route every key press to
                 // `handle_line_select_key` so `j`/`k`/arrows (and their Shift-extend forms) move
                 // the marker instead of firing viewer intents. Mutually exclusive with the

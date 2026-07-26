@@ -104,6 +104,7 @@ fn sample_state() -> ViewState {
         line_select: None,
         content_selection: None,
         help: None,
+        context_menu: None,
     }
 }
 
