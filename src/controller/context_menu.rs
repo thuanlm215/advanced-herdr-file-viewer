@@ -77,6 +77,11 @@ impl ContextMenuState {
                     shortcut: "R",
                 },
                 ContextMenuItem {
+                    intent: Intent::OpenWorkspace,
+                    label: "Open workspace here",
+                    shortcut: "s",
+                },
+                ContextMenuItem {
                     intent: Intent::CopyRepoPath,
                     label: "Copy relative path",
                     shortcut: "y",
@@ -172,7 +177,7 @@ impl super::Controller {
         let dir_str = dir.to_string_lossy();
         let display = crate::text_layout::sanitize_control(&dir_str);
         if let Some(herdr) = self.herdr.as_ref() {
-            match herdr.run(&["workspace", "create", "--dir", &dir_str]) {
+            match herdr.run(&["workspace", "create", "--cwd", &dir_str, "--focus"]) {
                 Ok(_) => {
                     self.action_notice = Some(format!("Opened workspace in {display}"));
                 }
@@ -277,5 +282,9 @@ mod tests {
     fn for_file_includes_editor_and_app_options() {
         let menu = ContextMenuState::for_file((5, 5));
         assert_eq!(menu.selected_intent(), Some(Intent::OpenInEditor));
+        assert!(
+            menu.items.iter().any(|i| i.intent == Intent::OpenWorkspace),
+            "file menu must include OpenWorkspace"
+        );
     }
 }
