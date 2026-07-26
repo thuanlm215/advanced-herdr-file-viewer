@@ -242,8 +242,8 @@ impl super::Controller {
                 // Use the actual drawn rect (clamped by the presenter) so clicks
                 // hit the correct row even when the menu was shifted to fit on screen.
                 if let Some(rect) = self.geom.context_menu_rect {
-                    // The border takes the first row (title) and last row; items are inside.
-                    let items_y = rect.y + 1;
+                    // Items start after the top border (1 row) + padding (1 row) = 2 rows.
+                    let items_y = rect.y + 2;
                     let items_x_end = rect.x + rect.width;
                     if col >= rect.x
                         && col < items_x_end
