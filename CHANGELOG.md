@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are short on purpose; follow the
 `→` links for the full detail.
 
+## [1.16.0] - 2026-07-26
+
+### Fixed
+- Context menus reserve their vertical padding so every action is visible.
+
 ## [1.15.0] - 2026-07-26
 
 ### Added
@@ -12,9 +17,6 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 - Renamed plugin ID, name, config directory, and cache directory to `advanced-herdr-file-viewer` (`~/.config/herdr/plugins/config/advanced-herdr-file-viewer/`). → [configuration](docs/configuration.md)
-
-### Fixed
-- Context menus reserve their vertical padding so every action is visible.
 
 ## [1.14.0] - 2026-07-20
 
