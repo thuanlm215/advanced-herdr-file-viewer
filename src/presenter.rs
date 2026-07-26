@@ -1389,6 +1389,8 @@ pub struct PaneGeometry {
     /// widths + `HELP_TAB_SEP`), so a click maps to the tab actually drawn. Empty when the overlay is
     /// closed. The controller hit-tests a left-click against these to switch sections (AC-10).
     pub help_tabs: Vec<(usize, Rect)>,
+    /// The screen rect where the context menu overlay is drawn, `None` when the menu is closed.
+    pub context_menu_rect: Option<Rect>,
 }
 
 /// Compute the [`PaneGeometry`] for hit-testing the current frame — the same layout [`draw`]
@@ -1509,6 +1511,10 @@ pub fn geometry(area: Rect, state: &ViewState) -> PaneGeometry {
         help_body_rows,
         help_vbar,
         help_tabs,
+        context_menu_rect: state
+            .context_menu
+            .as_ref()
+            .and_then(|menu| context_menu_overlay_rect(area, menu)),
     }
 }
 
@@ -2755,10 +2761,9 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, help: &HelpView) {
     }
 }
 
-/// Layout and draw the context menu overlay at `menu.anchor`, clamped to `area`.
-fn draw_context_menu_overlay(frame: &mut Frame, area: Rect, menu: &ContextMenuView) {
+fn context_menu_overlay_rect(area: Rect, menu: &ContextMenuView) -> Option<Rect> {
     if menu.items.is_empty() || area.width == 0 || area.height == 0 {
-        return;
+        return None;
     }
     let max_label = menu
         .items
@@ -2771,7 +2776,15 @@ fn draw_context_menu_overlay(frame: &mut Frame, area: Rect, menu: &ContextMenuVi
 
     let x = menu.anchor.0.min(area.width.saturating_sub(width));
     let y = menu.anchor.1.min(area.height.saturating_sub(height));
-    let rect = Rect::new(x, y, width, height);
+    Some(Rect::new(x, y, width, height))
+}
+
+/// Layout and draw the context menu overlay at `menu.anchor`, clamped to `area`.
+fn draw_context_menu_overlay(frame: &mut Frame, area: Rect, menu: &ContextMenuView) {
+    let Some(rect) = context_menu_overlay_rect(area, menu) else {
+        return;
+    };
+    let width = rect.width;
 
     frame.render_widget(Clear, rect);
 

@@ -237,19 +237,28 @@ impl super::Controller {
             return Effects::noop();
         };
         let (col, row) = (ev.column, ev.row);
-        let _ = col;
         match ev.kind {
             MouseEventKind::Down(MouseButton::Left) => {
-                let start_row = menu.anchor.1 + 1;
-                let end_row = menu.anchor.1 + menu.items.len() as u16;
-                if row >= start_row && row <= end_row {
-                    let idx = (row - start_row) as usize;
-                    if let Some(item) = menu.items.get(idx) {
-                        let intent = item.intent;
-                        self.modal = Modal::None;
-                        return self.handle(intent);
+                // Use the actual drawn rect (clamped by the presenter) so clicks
+                // hit the correct row even when the menu was shifted to fit on screen.
+                if let Some(rect) = self.geom.context_menu_rect {
+                    // The border takes the first row (title) and last row; items are inside.
+                    let items_y = rect.y + 1;
+                    let items_x_end = rect.x + rect.width;
+                    if col >= rect.x
+                        && col < items_x_end
+                        && row >= items_y
+                        && row < items_y + menu.items.len() as u16
+                    {
+                        let idx = (row - items_y) as usize;
+                        if let Some(item) = menu.items.get(idx) {
+                            let intent = item.intent;
+                            self.modal = Modal::None;
+                            return self.handle(intent);
+                        }
                     }
                 }
+                // Click outside menu → close it
                 self.modal = Modal::None;
                 Effects::redraw()
             }
