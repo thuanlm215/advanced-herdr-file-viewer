@@ -2772,7 +2772,10 @@ fn context_menu_overlay_rect(area: Rect, menu: &ContextMenuView) -> Option<Rect>
         .max()
         .unwrap_or(24) as u16;
     let width = max_label.max(24).min(area.width);
-    let height = (menu.items.len() as u16 + 2).min(area.height);
+    // `modal_frame` reserves a border plus one padded row above and below its content. Account
+    // for both here: without the vertical padding, a menu with N actions only exposed N - 2 rows
+    // even when the pane itself had ample height.
+    let height = (menu.items.len() as u16 + 2 + PICKER_PADDING * 2).min(area.height);
 
     let x = menu.anchor.0.min(area.width.saturating_sub(width));
     let y = menu.anchor.1.min(area.height.saturating_sub(height));
@@ -2827,6 +2830,28 @@ fn draw_context_menu_overlay(frame: &mut Frame, area: Rect, menu: &ContextMenuVi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn context_menu_rect_reserves_rows_for_every_action_and_padding() {
+        let area = Rect::new(0, 0, 80, 24);
+        let menu = ContextMenuView {
+            items: (0..4)
+                .map(|n| ContextMenuItemRowView {
+                    label: format!("Action {n}"),
+                    shortcut: n.to_string(),
+                })
+                .collect(),
+            cursor: 0,
+            anchor: (8, 4),
+        };
+
+        let rect = context_menu_overlay_rect(area, &menu).expect("non-empty menu has a rect");
+        assert_eq!(
+            modal_frame().inner(rect).height,
+            menu.items.len() as u16,
+            "every action must have a visible row after borders and vertical padding"
+        );
+    }
 
     /// Flatten a line's spans to plain text (drops styling) so a test can read the result of
     /// `patch_char_range` back as a string.
