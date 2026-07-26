@@ -27,7 +27,7 @@ PowerShell launcher scripts.
 - **Preview means best-effort, not a parity guarantee.** There's no Windows host in this
   project's CI gate (the `windows-latest` job is advisory, not required), so a Windows-specific
   regression can land between releases. Full feature parity with Linux/macOS is the goal, not a
-  promise. Please [open an issue](https://github.com/smarzban/herdr-file-viewer/issues) if you
+  promise. Please [open an issue](https://github.com/thuanlm215/advanced-herdr-file-viewer/issues) if you
   hit a Windows-specific problem.
 - **WSL works today, with zero extra setup.** If you'd rather not wait on native-Windows preview
   maturity, the existing Linux (`x86_64-unknown-linux-musl`) binary already runs unmodified

@@ -1628,13 +1628,13 @@ fn update_banner_renders_as_a_bottom_status_line() {
     // AC-U1: when behind, the bottom row carries the version + the install command.
     let mut state = sample_state();
     state.update_banner = Some(
-        "↑ v1.1.0 available · herdr plugin install smarzban/herdr-file-viewer · u to dismiss"
+        "↑ v1.1.0 available · herdr plugin install thuanlm215/advanced-herdr-file-viewer · u to dismiss"
             .to_string(),
     );
     let out = render(&state, 100, 24);
     assert!(out.contains("v1.1.0 available"), "names the version\n{out}");
     assert!(
-        out.contains("herdr plugin install smarzban/herdr-file-viewer"),
+        out.contains("herdr plugin install thuanlm215/advanced-herdr-file-viewer"),
         "shows the install command\n{out}"
     );
     // The banner sits on the last interior row; the tree/content are still drawn above it.
@@ -3287,7 +3287,7 @@ fn help_state() -> ViewState {
             "Herdr File Viewer\n\
              A git-aware, read-only file viewer\n\
              \n\
-             github.com/smarzban/herdr-file-viewer\n\
+             github.com/thuanlm215/advanced-herdr-file-viewer\n\
              \n\
              v1.13.0 · Up to date\n\
              MIT License\n\

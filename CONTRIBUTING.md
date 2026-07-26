@@ -5,7 +5,7 @@ all welcome.
 
 ## Reporting bugs & requesting features
 
-[Open an issue](https://github.com/smarzban/herdr-file-viewer/issues) — there are templates for a
+[Open an issue](https://github.com/thuanlm215/advanced-herdr-file-viewer/issues) — there are templates for a
 **bug report** and a **feature request**. For a bug, the plugin version (`?` overlay → About) and
 your herdr version help a lot.
 

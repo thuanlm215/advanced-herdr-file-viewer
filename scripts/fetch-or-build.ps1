@@ -23,7 +23,7 @@
 
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'smarzban/herdr-file-viewer'
+$Repo = 'thuanlm215/advanced-herdr-file-viewer'
 
 $RepoRoot = if ($env:FV_REPO_ROOT) { $env:FV_REPO_ROOT } else { Join-Path $PSScriptRoot '..' }
 $CargoToml = if ($env:FV_CARGO_TOML) { $env:FV_CARGO_TOML } else { Join-Path $RepoRoot 'Cargo.toml' }

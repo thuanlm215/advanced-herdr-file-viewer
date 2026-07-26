@@ -15,7 +15,7 @@
 # FV_BASE_URL) so the logic is exercised by a hermetic test with stubbed uname/curl/cargo/git.
 set -u
 
-repo="smarzban/herdr-file-viewer"
+repo="thuanlm215/advanced-herdr-file-viewer"
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root="${FV_REPO_ROOT:-$script_dir/..}"

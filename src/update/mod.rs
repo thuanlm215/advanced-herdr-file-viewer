@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn repo_slug_is_owner_repo() {
         // Derived from CARGO_PKG_REPOSITORY so it stays correct if the repo moves.
-        assert_eq!(repo_slug(), "smarzban/herdr-file-viewer");
+        assert_eq!(repo_slug(), "thuanlm215/advanced-herdr-file-viewer");
     }
 
     #[test]
@@ -318,7 +318,7 @@ mod tests {
         let b = banner_text(&v);
         assert!(b.contains("1.1.0"), "names the version: {b}");
         assert!(
-            b.contains("herdr plugin install smarzban/herdr-file-viewer"),
+            b.contains("herdr plugin install thuanlm215/advanced-herdr-file-viewer"),
             "shows install cmd: {b}"
         );
         assert!(b.contains('u'), "mentions the dismiss key: {b}");

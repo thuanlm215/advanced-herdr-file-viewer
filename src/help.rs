@@ -474,7 +474,7 @@ mod tests {
         );
         // The repo URL is rendered BARE — host+path only, the https:// scheme stripped.
         assert!(
-            text.contains("github.com/smarzban/herdr-file-viewer"),
+            text.contains("github.com/thuanlm215/advanced-herdr-file-viewer"),
             "about_text must contain the bare repository URL (AC-17)"
         );
         assert!(

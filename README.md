@@ -1,6 +1,6 @@
-# herdr-file-viewer
+# advanced-herdr-file-viewer
 
-[![CI](https://github.com/smarzban/herdr-file-viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/smarzban/herdr-file-viewer/actions/workflows/ci.yml)
+[![CI](https://github.com/thuanlm215/advanced-herdr-file-viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/thuanlm215/advanced-herdr-file-viewer/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust 1.96+](https://img.shields.io/badge/rust-1.96%2B-orange.svg)
 ![herdr 0.7+](https://img.shields.io/badge/herdr-0.7%2B-8a2be2)
@@ -57,7 +57,7 @@ A taste of what the keys do — the [full key & mouse reference](docs/keys.md) h
 
 ```bash
 # 1. Install the plugin (downloads a prebuilt binary for released versions; otherwise builds from source):
-herdr plugin install smarzban/herdr-file-viewer
+herdr plugin install thuanlm215/advanced-herdr-file-viewer
 
 # 2. (recommended) install the renderers, so markdown / diffs / code are styled, not plain text:
 brew install glow git-delta bat     # macOS, or use your package manager
@@ -120,9 +120,9 @@ Full docs live in **[docs/](docs/README.md)**:
 ## Contributing
 
 Bug reports and feature requests are very welcome — please
-[open an issue](https://github.com/smarzban/herdr-file-viewer/issues). To build, test, and send a
+[open an issue](https://github.com/thuanlm215/advanced-herdr-file-viewer/issues). To build, test, and send a
 change, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © Saeed Marzban
+[MIT](LICENSE) © thuanlm215

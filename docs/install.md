@@ -8,7 +8,7 @@ Without git the viewer still opens, but those features are degraded (no status c
 diffs). The optional renderers (`glow` / `delta` / `bat`) are separate. See
 [external renderers](renderers.md).
 
-> **No Rust toolchain needed when a prebuilt exists.** `herdr plugin install smarzban/herdr-file-viewer`
+> **No Rust toolchain needed when a prebuilt exists.** `herdr plugin install thuanlm215/advanced-herdr-file-viewer`
 > downloads a prebuilt, SHA-256-verified binary for your platform (macOS arm64/x86_64, Linux x86_64,
 > Windows x86_64 preview).
 > The prebuilt is matched by **version**, so you get it even when `main` is ahead of the latest tag.
@@ -23,9 +23,9 @@ which the viewer pane launches:
 
 ```bash
 # install (and update, re-run any time to get the latest):
-herdr plugin install smarzban/herdr-file-viewer
-# …optional: pin a specific older version for reproducibility:
-herdr plugin install smarzban/herdr-file-viewer --ref v1.0.0
+herdr plugin install thuanlm215/advanced-herdr-file-viewer
+# Or a specific tag:
+herdr plugin install thuanlm215/advanced-herdr-file-viewer --ref v1.0.0
 
 # or, for local development, link this checkout in place:
 cargo build --release            # plugin link does NOT run the [[build]] step, so build first
@@ -62,7 +62,7 @@ and the command to update. Press `u` to dismiss it for the session.
 To update, just re-run the install. It pulls the latest:
 
 ```bash
-herdr plugin install smarzban/herdr-file-viewer
+herdr plugin install thuanlm215/advanced-herdr-file-viewer
 ```
 
 - You **don't** need `--ref` to stay current; it only *pins* a specific version (and a pin stays
