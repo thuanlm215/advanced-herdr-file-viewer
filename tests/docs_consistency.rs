@@ -201,7 +201,7 @@ fn configuration_doc_documents_config_file() {
     );
     // XDG fallback location:
     assert!(
-        CONFIG_DOC.contains(".config/herdr-file-viewer") || CONFIG_DOC.contains("XDG_CONFIG_HOME"),
+        CONFIG_DOC.contains(".config/advanced-herdr-file-viewer") || CONFIG_DOC.contains("XDG_CONFIG_HOME"),
         "docs/configuration.md must document the XDG fallback location"
     );
     for key in [

@@ -98,7 +98,7 @@ When the user asks to open something "in the file viewer" / "in Files":
 
 ```bash
 herdr plugin pane open \
-  --plugin herdr-file-viewer \
+  --plugin advanced-herdr-file-viewer \
   --entrypoint file-viewer \
   --placement split \
   --focus \

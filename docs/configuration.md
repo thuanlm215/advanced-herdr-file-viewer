@@ -9,16 +9,16 @@ renderer commands (`markdown`, `diff`, `syntax`) are not listed there; they live
 
 **Quick start.** A fully-commented [`config.example.toml`](../config.example.toml) ships in the
 plugin folder, documenting every setting. You never have to guess where the live file goes: under
-herdr, `herdr plugin config-dir herdr-file-viewer` prints the exact directory herdr keeps it in.
+herdr, `herdr plugin config-dir advanced-herdr-file-viewer` prints the exact directory herdr keeps it in.
 Copy the example there as `config.toml` in one line:
 
 ```bash
-cp "$(herdr plugin list --json | jq -r '.result.plugins[]|select(.plugin_id=="herdr-file-viewer").plugin_root')/config.example.toml" \
-   "$(herdr plugin config-dir herdr-file-viewer)/config.toml"
+cp "$(herdr plugin list --json | jq -r '.result.plugins[]|select(.plugin_id=="advanced-herdr-file-viewer").plugin_root')/config.example.toml" \
+   "$(herdr plugin config-dir advanced-herdr-file-viewer)/config.toml"
 ```
 
 No `jq`? Run `herdr plugin list` to see the plugin folder (shown in brackets) and copy from there:
-`cp <plugin-folder>/config.example.toml "$(herdr plugin config-dir herdr-file-viewer)/config.toml"`.
+`cp <plugin-folder>/config.example.toml "$(herdr plugin config-dir advanced-herdr-file-viewer)/config.toml"`.
 
 Then uncomment the lines you want and relaunch. Copying it as-is changes nothing (every line is
 commented out). However you copy it, **rename the copy to `config.toml`**: the `config.example.toml`
@@ -28,10 +28,10 @@ filename itself is never read.
 
 When run under herdr, the config lives at `$HERDR_PLUGIN_CONFIG_DIR/config.toml` — herdr provides
 that directory (on Linux it is
-`~/.config/herdr/plugins/config/herdr-file-viewer/`, so the file is that path plus `config.toml`).
+`~/.config/herdr/plugins/config/advanced-herdr-file-viewer/`, so the file is that path plus `config.toml`).
 Run standalone (outside herdr), it
-falls back to `$XDG_CONFIG_HOME/herdr-file-viewer/config.toml`, defaulting to
-`~/.config/herdr-file-viewer/config.toml` when `XDG_CONFIG_HOME` isn't set. A missing file is the
+falls back to `$XDG_CONFIG_HOME/advanced-herdr-file-viewer/config.toml`, defaulting to
+`~/.config/advanced-herdr-file-viewer/config.toml` when `XDG_CONFIG_HOME` isn't set. A missing file is the
 normal case — every key falls back to its default.
 
 ## Precedence
@@ -47,7 +47,7 @@ applicable environment variable; for those it's `config > default` only.
 ## Keys
 
 ```toml
-# ~/.config/herdr-file-viewer/config.toml (or the herdr-provided path above)
+# ~/.config/advanced-herdr-file-viewer/config.toml (or the herdr-provided path above)
 
 editor = "code --wait"      # command to open a file with `e` (overrides $EDITOR)
 

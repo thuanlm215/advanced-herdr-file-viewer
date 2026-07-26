@@ -10,6 +10,9 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 - Right-click a tree node (or press `m`) to open a context menu of actions (`↑`/`↓` move, `Enter` selects, `Esc` closes), including an option to open a new herdr workspace in the selected directory (`s`). → [usage](docs/usage.md#using-the-mouse) · [keys](docs/keys.md)
 
+### Changed
+- Renamed plugin ID, name, config directory, and cache directory to `advanced-herdr-file-viewer` (`~/.config/herdr/plugins/config/advanced-herdr-file-viewer/`). → [configuration](docs/configuration.md)
+
 ## [1.14.0] - 2026-07-20
 
 ### Added

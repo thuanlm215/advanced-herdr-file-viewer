@@ -190,8 +190,8 @@ pub fn parse_config(s: &str) -> (Config, LoadOutcome) {
 /// env-var-with-fallback idiom in `herdr::resolve_program` / `host::parse_context`).
 ///
 /// Precedence: `HERDR_PLUGIN_CONFIG_DIR` (non-empty) wins outright; otherwise fall back to the
-/// XDG-style `$XDG_CONFIG_HOME/herdr-file-viewer/config.toml`, or `$HOME/.config/herdr-file-viewer/config.toml`,
-/// or (no HOME) the relative `.config/herdr-file-viewer/config.toml` as a last resort. Empty-string
+/// XDG-style `$XDG_CONFIG_HOME/advanced-herdr-file-viewer/config.toml`, or `$HOME/.config/advanced-herdr-file-viewer/config.toml`,
+/// or (no HOME) the relative `.config/advanced-herdr-file-viewer/config.toml` as a last resort. Empty-string
 /// env values are treated as absent, same as `host::parse_context` does for its context fields.
 pub fn config_path(get: impl Fn(&str) -> Option<String>) -> std::path::PathBuf {
     if let Some(dir) = get("HERDR_PLUGIN_CONFIG_DIR").filter(|s| !s.is_empty()) {
@@ -204,7 +204,7 @@ pub fn config_path(get: impl Fn(&str) -> Option<String>) -> std::path::PathBuf {
     } else {
         std::path::PathBuf::from(".config")
     };
-    base.join("herdr-file-viewer").join("config.toml")
+    base.join("advanced-herdr-file-viewer").join("config.toml")
 }
 
 /// Thin convenience wrapper over [`config_path`] using real process env (untested by unit tests;
@@ -507,7 +507,7 @@ mod tests {
         };
         assert_eq!(
             config_path(get),
-            std::path::PathBuf::from("/x/xdg/herdr-file-viewer/config.toml")
+            std::path::PathBuf::from("/x/xdg/advanced-herdr-file-viewer/config.toml")
         );
     }
 
@@ -519,7 +519,7 @@ mod tests {
         };
         assert_eq!(
             config_path(get),
-            std::path::PathBuf::from("/home/u/.config/herdr-file-viewer/config.toml")
+            std::path::PathBuf::from("/home/u/.config/advanced-herdr-file-viewer/config.toml")
         );
     }
 
@@ -532,7 +532,7 @@ mod tests {
         };
         assert_eq!(
             config_path(get),
-            std::path::PathBuf::from("/home/u/.config/herdr-file-viewer/config.toml")
+            std::path::PathBuf::from("/home/u/.config/advanced-herdr-file-viewer/config.toml")
         );
     }
 

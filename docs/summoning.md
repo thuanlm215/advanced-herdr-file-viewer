@@ -23,7 +23,7 @@ command = ["bash", "scripts/open-file-viewer.sh"]   # opens the pane via the her
 Summon it by invoking the action:
 
 ```bash
-herdr plugin action invoke open-file-viewer --plugin herdr-file-viewer
+herdr plugin action invoke open-file-viewer --plugin advanced-herdr-file-viewer
 ```
 
 It opens the viewer in a **split** pane beside your current work. The launcher
@@ -42,7 +42,7 @@ action so it runs with the plugin's working directory (no hard-coded paths):
 [[keys.command]]
 key = "prefix+f"   # any herdr key syntax, e.g. ctrl+b then f
 type = "shell"     # run detached; do NOT use "pane" (it would close when the command exits)
-command = "herdr plugin action invoke open-file-viewer --plugin herdr-file-viewer"
+command = "herdr plugin action invoke open-file-viewer --plugin advanced-herdr-file-viewer"
 ```
 
 Reload with `herdr server reload-config`. Pressing the key then opens / focuses / hides the
@@ -70,7 +70,7 @@ Bind it to its own key, e.g. `prefix+shift+f` alongside `prefix+f` for the split
 [[keys.command]]
 key = "prefix+shift+f"
 type = "shell"
-command = "herdr plugin action invoke open-file-viewer-tab --plugin herdr-file-viewer"
+command = "herdr plugin action invoke open-file-viewer-tab --plugin advanced-herdr-file-viewer"
 ```
 
 ## Limitation over `herdr --remote`

@@ -1142,11 +1142,11 @@ mod tests {
         let text = settings_text(
             &eff,
             &LoadOutcome::Absent,
-            std::path::Path::new("/home/u/.config/herdr-file-viewer/config.toml"),
+            std::path::Path::new("/home/u/.config/advanced-herdr-file-viewer/config.toml"),
             &wired,
         );
         assert!(
-            text.contains("/home/u/.config/herdr-file-viewer/config.toml"),
+            text.contains("/home/u/.config/advanced-herdr-file-viewer/config.toml"),
             "the config-file location must be shown:\n{text}"
         );
     }

@@ -70,12 +70,12 @@ Then **bind a key** in your herdr config (`~/.config/herdr/config.toml`) so one 
 [[keys.command]]              # open in a split beside your work
 key = "prefix+f"
 type = "shell"
-command = "herdr plugin action invoke open-file-viewer --plugin herdr-file-viewer"
+command = "herdr plugin action invoke open-file-viewer --plugin advanced-herdr-file-viewer"
 
 [[keys.command]]              # …or in its own tab
 key = "prefix+shift+f"
 type = "shell"
-command = "herdr plugin action invoke open-file-viewer-tab --plugin herdr-file-viewer"
+command = "herdr plugin action invoke open-file-viewer-tab --plugin advanced-herdr-file-viewer"
 ```
 
 Run `herdr server reload-config`, then press your key. That's the whole setup: the split-pane
@@ -91,7 +91,7 @@ Deeper detail lives in the docs: [install & updating](docs/install.md),
 An optional, **read-only** TOML config file lets you override the editor, the renderer/opener
 commands, a couple of startup toggles, the tree layout, and the keybindings. A fully-commented
 [`config.example.toml`](config.example.toml) ships in the plugin folder; copy it as `config.toml`
-into the directory `herdr plugin config-dir herdr-file-viewer` prints, then uncomment what you want.
+into the directory `herdr plugin config-dir advanced-herdr-file-viewer` prints, then uncomment what you want.
 
 The full reference — file location, precedence, every key, and `[keys]` remapping — is in
 **[docs/configuration.md](docs/configuration.md)**. See your effective settings any time in the `?`

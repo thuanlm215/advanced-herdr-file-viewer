@@ -24,7 +24,7 @@ viewer_bin="$script_dir/../target/release/herdr-file-viewer"
 
 open_pane() {
   exec "$herdr_bin" plugin pane open \
-    --plugin herdr-file-viewer \
+    --plugin advanced-herdr-file-viewer \
     --entrypoint file-viewer \
     --placement split \
     --direction right \

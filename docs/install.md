@@ -48,7 +48,7 @@ so two quick steps remain:
 1. **Bind a key** to summon the viewer. See [Quick start](../README.md#quick-start) (or
    [Summoning the viewer](summoning.md) for split-vs-tab and the `--remote` caveat). No key bound
    yet? Open it once from the CLI:
-   `herdr plugin action invoke open-file-viewer --plugin herdr-file-viewer`.
+   `herdr plugin action invoke open-file-viewer --plugin advanced-herdr-file-viewer`.
 2. **(Optional) install the renderers** (`glow` / `delta` / `bat`) so markdown, diffs, and code are
    styled instead of plain text. See [external renderers](renderers.md). The viewer works without
    them (plain-text fallback).

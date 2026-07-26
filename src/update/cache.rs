@@ -38,8 +38,8 @@ pub fn next_cache(now_unix: u64, latest: Option<Version>) -> Cache {
     }
 }
 
-/// The plugin's cache directory: `$XDG_CACHE_HOME/herdr-file-viewer`, else
-/// `$HOME/.cache/herdr-file-viewer` (unix) / `%LOCALAPPDATA%\herdr-file-viewer` (Windows).
+/// The plugin's cache directory: `$XDG_CACHE_HOME/advanced-herdr-file-viewer`, else
+/// `$HOME/.cache/advanced-herdr-file-viewer` (unix) / `%LOCALAPPDATA%\advanced-herdr-file-viewer` (Windows).
 /// `None` when no base directory is available (then we check without persisting — a rare
 /// headless case).
 pub fn cache_dir() -> Option<PathBuf> {
@@ -51,10 +51,10 @@ pub fn cache_dir() -> Option<PathBuf> {
 /// `std::env::var_os`'s signature.
 fn cache_dir_from(get_env: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<PathBuf> {
     let base = cache_base_dir(get_env)?;
-    Some(base.join("herdr-file-viewer"))
+    Some(base.join("advanced-herdr-file-viewer"))
 }
 
-/// The per-user cache base directory, before the `herdr-file-viewer` subdirectory is joined.
+/// The per-user cache base directory, before the `advanced-herdr-file-viewer` subdirectory is joined.
 /// unix: `$XDG_CACHE_HOME`, else `$HOME/.cache` (today's behaviour, unchanged — AC-3). Windows:
 /// `%LOCALAPPDATA%`. `None` when nothing resolves (AC-7).
 #[cfg(not(windows))]
@@ -169,7 +169,7 @@ mod tests {
         #[cfg(windows)]
         let got = cache_dir_from(env(&[("LOCALAPPDATA", r"C:\Users\user\AppData\Local")]));
         assert!(
-            got.unwrap().ends_with("herdr-file-viewer"),
+            got.unwrap().ends_with("advanced-herdr-file-viewer"),
             "joins the plugin subdir onto the resolved base"
         );
     }
