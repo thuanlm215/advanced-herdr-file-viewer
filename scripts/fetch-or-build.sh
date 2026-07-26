@@ -77,6 +77,7 @@ case "$os" in
   Linux)
     case "$arch" in
       x86_64|amd64)  triple="x86_64-unknown-linux-musl" ;;
+      aarch64|arm64) triple="aarch64-unknown-linux-musl" ;;
     esac
     ;;
 esac

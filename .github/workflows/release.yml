@@ -14,16 +14,10 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - os: macos-latest
-            triple: aarch64-apple-darwin
-          - os: macos-latest
-            triple: x86_64-apple-darwin
           - os: ubuntu-latest
             triple: x86_64-unknown-linux-musl
-          # Windows support is preview; v1 targets x86_64-pc-windows-msvc only (no aarch64 —
-          # AC-N4).
-          - os: windows-latest
-            triple: x86_64-pc-windows-msvc
+          - os: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-musl
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +45,7 @@ jobs:
           targets: ${{ matrix.triple }}
 
       - name: Install musl tools
-        if: matrix.triple == 'x86_64-unknown-linux-musl'
+        if: contains(matrix.triple, '-musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Build

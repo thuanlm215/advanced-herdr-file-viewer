@@ -20,13 +20,11 @@ fn triggers_on_version_tags() {
 }
 
 #[test]
-fn builds_the_four_published_targets() {
+fn builds_the_published_targets() {
     let w = workflow();
     for triple in [
-        "aarch64-apple-darwin",
-        "x86_64-apple-darwin",
         "x86_64-unknown-linux-musl",
-        "x86_64-pc-windows-msvc",
+        "aarch64-unknown-linux-musl",
     ] {
         assert!(w.contains(triple), "release must build {triple}");
     }
