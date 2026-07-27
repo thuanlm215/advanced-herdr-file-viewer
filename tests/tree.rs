@@ -187,6 +187,24 @@ fn reveal_expands_ancestors_and_selects_target() {
     );
 }
 
+#[test]
+fn collapse_all_closes_every_directory_and_selects_top_level_ancestor() {
+    let dir = TempDir::new();
+    fs::create_dir_all(dir.path().join("src/inner")).unwrap();
+    fs::write(dir.path().join("src/inner/deep.rs"), "x").unwrap();
+    fs::create_dir_all(dir.path().join("docs")).unwrap();
+
+    let mut model = TreeModel::new(dir.path());
+    let target = dir.path().join("src/inner/deep.rs");
+    assert!(model.reveal(&target));
+    model.collapse_all();
+
+    let visible = model.visible_nodes();
+    assert!(visible.iter().all(|node| node.depth == 0));
+    assert!(visible.iter().all(|node| !node.expanded));
+    assert_eq!(model.selected().unwrap().path, dir.path().join("src"));
+}
+
 /// (b) `changed_only` ON, target NOT in changed set → `reveal` clears `changed_only` and selects
 /// the file (filter-relax, AC-10).
 #[test]

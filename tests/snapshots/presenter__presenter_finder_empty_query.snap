@@ -2,7 +2,7 @@
 source: tests/presenter.rs
 expression: "render(&finder_state_empty_query(), 100, 24)"
 ---
-"┌r─────────────────────────────────────┐┌main.rs───────────────────────────────────────────────────┐"
+"┌r──────────────────────────[-]─[p]─[x]┐┌main.rs───────────────────────────────────────────────────┐"
 "│  ▾ src                               ││Showing first 5000 lines (truncated)                      │"
 "│M   main.rs                           ││delta not found — showing plain diff                      │"
 "│    ▾ inner                           ││fn main() {                                               │"

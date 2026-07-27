@@ -7,7 +7,7 @@ use herdr_file_viewer::presenter::{
     AnnotationEditorKind, AnnotationEditorView, AnnotationIndicatorsView, AnnotationOverviewView,
     AnnotationRowView, AnnotationTargetView, CharSelView, ContentSearch, DiscardConfirmView,
     FinderView, FlashLine, Focus, HelpView, LineSelectView, PickerRowView, PickerView, ViewState,
-    draw,
+    draw, geometry,
 };
 use herdr_file_viewer::render::to_text;
 use herdr_file_viewer::search::Match;
@@ -85,8 +85,10 @@ fn sample_state() -> ViewState {
         // A high cap so the percentage governs in these fixtures (the cap only bites on very wide
         // panes; the cap's own behaviour is covered by dedicated tests).
         tree_max_cols: 1000,
+        tree_icons: herdr_file_viewer::config::TreeIcons::Off,
         split_manual: false,
         zoomed: false,
+        pinned: false,
         update_banner: None,
         picker: None,
         finder: None,
@@ -150,6 +152,32 @@ fn tree_borders_show_root_name_on_top_and_branch_on_bottom() {
         !out.contains("featzz"),
         "no branch is rendered when branch is None\n{out}"
     );
+}
+
+#[test]
+fn tree_header_draws_collapse_pin_close_and_exposes_matching_hitboxes() {
+    let mut state = sample_state();
+    state.pinned = true;
+    let out = render(&state, 100, 24);
+    assert!(out.lines().next().unwrap().contains("[-]─[P]─[x]"));
+
+    let geom = geometry(ratatui::layout::Rect::new(0, 0, 100, 24), &state);
+    assert!(geom.tree_collapse_button.is_some());
+    assert!(geom.tree_pin_button.is_some());
+    assert!(geom.tree_close_button.is_some());
+}
+
+#[test]
+fn tree_icon_modes_render_portable_nerd_and_off_variants() {
+    let mut state = sample_state();
+    state.tree_icons = herdr_file_viewer::config::TreeIcons::Unicode;
+    assert!(render(&state, 100, 24).contains("▾ ▣ src"));
+
+    state.tree_icons = herdr_file_viewer::config::TreeIcons::Nerd;
+    assert!(render(&state, 100, 24).contains(" src"));
+
+    state.tree_icons = herdr_file_viewer::config::TreeIcons::Off;
+    assert!(render(&state, 100, 24).contains("▾ src"));
 }
 
 #[test]

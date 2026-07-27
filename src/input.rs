@@ -178,6 +178,13 @@ pub(crate) const REGISTRY: &[Binding] = &[
         category: "Navigation",
     },
     Binding {
+        intent: Intent::CollapseAll,
+        name: "collapse_all",
+        default_keys: &[KeyCode::Char('C')],
+        description: "Collapse every open directory from the tree root.",
+        category: "Navigation",
+    },
+    Binding {
         intent: Intent::Activate,
         name: "activate",
         default_keys: &[KeyCode::Enter],
@@ -337,6 +344,13 @@ pub(crate) const REGISTRY: &[Binding] = &[
         default_keys: &[KeyCode::Char('z')],
         description: "Hide the tree so the content pane fills the frame, or restore the split.",
         category: "View & layout",
+    },
+    Binding {
+        intent: Intent::TogglePin,
+        name: "toggle_pin",
+        default_keys: &[KeyCode::Char('p')],
+        description: "Pin or unpin the viewer so close keys cannot quit it accidentally.",
+        category: "Session",
     },
     Binding {
         intent: Intent::Refresh,
@@ -719,6 +733,7 @@ mod tests {
         (KeyCode::Char('l'), Intent::Expand),
         (KeyCode::Left, Intent::Collapse),
         (KeyCode::Char('h'), Intent::Collapse),
+        (KeyCode::Char('C'), Intent::CollapseAll),
         (KeyCode::Enter, Intent::Activate),
         (KeyCode::Char('Z'), Intent::OpenFullscreen),
         (KeyCode::Char('i'), Intent::ToggleIgnore),
@@ -750,6 +765,7 @@ mod tests {
         (KeyCode::Char('>'), Intent::GrowTree),
         (KeyCode::Char('w'), Intent::ToggleWrap),
         (KeyCode::Char('z'), Intent::ToggleZoom),
+        (KeyCode::Char('p'), Intent::TogglePin),
         (KeyCode::Char('r'), Intent::Refresh),
         (KeyCode::Char('u'), Intent::DismissUpdate),
         (KeyCode::Char('?'), Intent::ShowHelp),

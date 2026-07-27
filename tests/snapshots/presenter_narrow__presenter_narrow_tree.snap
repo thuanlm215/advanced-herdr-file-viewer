@@ -2,7 +2,7 @@
 source: tests/presenter_narrow.rs
 expression: "render(&state(60, Focus::Tree), 60, 20)"
 ---
-"┌r─────────────────────────────────────────────────────────┐"
+"┌r──────────────────────────────────────────────[-]─[p]─[x]┐"
 "│  ▾ src                                                   │"
 "│M   main.rs                                               │"
 "│? scratch.log                                             │"

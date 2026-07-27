@@ -17,6 +17,8 @@ pub enum Intent {
     Expand,
     /// Collapse the selected directory (AC-3).
     Collapse,
+    /// Collapse every expanded directory from the tree root.
+    CollapseAll,
     /// Activate the selected node (Enter / double-click): expand/collapse a directory, or open
     /// a file in zoom mode (content pane full-screen). Never an edit — the editor hand-off
     /// stays on [`Intent::OpenInEditor`] (AC-N3).
@@ -89,6 +91,8 @@ pub enum Intent {
     /// Hide the tree so the content pane fills the frame / restore the two-column layout — a
     /// pure layout toggle for reading a file full-screen.
     ToggleZoom,
+    /// Pin/unpin the viewer. While pinned, close keys cannot quit the pane at the base layer.
+    TogglePin,
     /// Re-read git state (working-tree status + changed-set) and re-render, so the viewer picks
     /// up changes made outside it — a merge, pull, or commit in another pane. Read-only.
     Refresh,
@@ -146,11 +150,12 @@ pub enum Intent {
 impl Intent {
     /// Every intent variant — lets the dispatcher and tests enumerate the closed set so
     /// keyboard-completeness (AC-18) and the no-file/git-mutation invariant (AC-N3) stay checkable.
-    pub const ALL: [Intent; 39] = [
+    pub const ALL: [Intent; 41] = [
         Intent::NavUp,
         Intent::NavDown,
         Intent::Expand,
         Intent::Collapse,
+        Intent::CollapseAll,
         Intent::Activate,
         Intent::OpenFullscreen,
         Intent::ToggleIgnore,
@@ -172,6 +177,7 @@ impl Intent {
         Intent::GrowTree,
         Intent::ToggleWrap,
         Intent::ToggleZoom,
+        Intent::TogglePin,
         Intent::Refresh,
         Intent::DismissUpdate,
         Intent::SwitchWorktree,
@@ -206,6 +212,7 @@ mod tests {
                 | Intent::NavDown
                 | Intent::Expand
                 | Intent::Collapse
+                | Intent::CollapseAll
                 | Intent::Activate
                 | Intent::OpenFullscreen
                 | Intent::ToggleIgnore
@@ -226,6 +233,7 @@ mod tests {
                 | Intent::GrowTree
                 | Intent::ToggleWrap
                 | Intent::ToggleZoom
+                | Intent::TogglePin
                 | Intent::Refresh
                 | Intent::DismissUpdate
                 | Intent::SwitchWorktree
@@ -312,11 +320,11 @@ mod tests {
     }
 
     #[test]
-    fn all_length_is_39() {
+    fn all_length_is_41() {
         assert_eq!(
             Intent::ALL.len(),
-            39,
-            "Intent::ALL must have exactly 39 variants"
+            41,
+            "Intent::ALL must have exactly 41 variants"
         );
     }
 

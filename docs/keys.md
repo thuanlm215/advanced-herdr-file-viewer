@@ -14,6 +14,7 @@ is additive and on by default.
 | `↑` / `k`, `↓` / `j` | Move the tree cursor, or **scroll the content pane** vertically when it is focused |
 | `→` / `l` | Expand the selected directory, or **scroll the content pane right** when it is focused |
 | `←` / `h` | Collapse the selected directory, or **scroll the content pane left** when it is focused |
+| `C` (Shift+`c`) | Collapse every open directory from the tree root; the selection returns to its top-level ancestor |
 | `H` (Shift+`h`) | Scroll the **tree** pane left (long / deeply-nested rows), inert unless the tree is focused |
 | `L` (Shift+`l`) | Focus-gated: with the **tree** focused, scroll it right (long / deeply-nested rows); with the **content pane** focused (or zoomed), enter **line-select mode** to select lines and copy either a `file:line` reference or the content itself (see [below](#copy-a-line-reference-or-line-content-l)) |
 | _line-select mode_ | `j`/`k` (or `↑`/`↓`) move the marker, `Shift`+move (`J`/`K`, Shift+`↑`/`↓`) extends a line selection; **click-drag** with the mouse selects **text** (character-granular); `a` adds an annotation for the selected line/range, `Enter` copies the `path:line` / `path:start-end` **reference**, `y`/`Y` copies the selected **content**, `Esc` exits |
@@ -42,17 +43,21 @@ is additive and on by default.
 | `<` / `>` | Narrow / widen the tree column (move the divider) |
 | `w` | Toggle line wrapping for the content pane. For rendered markdown this switches between the fit-to-pane view (wide tables sized to fit, over-long cells shown as `…`) and a wide view that renders tables at full width and scrolls horizontally (`←`/`→`) so you can read every cell |
 | `z` | Zoom: hide the tree so the content pane fills the frame; press again (or `q`/`Esc`) to restore the two-column layout |
+| `p` | Pin/unpin the viewer. While pinned, `q`/`Esc` still dismiss overlays, search, and zoom, but cannot quit the pane |
 | `Z` (Shift+`z`) | **Full-screen a file** (toggle): open the selected file like `Enter` _and_ zoom the viewer's herdr pane to fill the whole terminal, so the file takes over the entire screen instead of just the split. Press `Z` again (or `Esc`/`q`, or `z`) to return to the normal two-column split; switching worktree or quitting also restores the pane. On a directory it just expands/collapses like `Enter`; falls back to the in-pane zoom when the host isn't herdr |
 | `r` | Refresh git state: pick up changes made outside the viewer (a merge / pull / commit elsewhere) |
 | `W` (Shift+`w`) | **Switch worktree**: open a picker of the repo's git worktrees and re-root the viewer to the one you pick (read-only; no branch checkout). Marks the current worktree and pre-selects the one with an active herdr agent; `↑`/`↓` move, `←`/`→` scroll long paths, `Enter` switches, `Esc` cancels. A switch clears annotations (their targets belong to the old root), so with any held it confirms first (`y` copies them and switches, `Enter` switches and discards, `Esc` cancels) |
 | `?` (Shift+`/`) | Open the **help overlay**: What's New (latest changelog, rendered markdown) + About (version, repo, license, update status); `Esc` / `q` closes it |
 | `u` | Dismiss the "update available" banner for this session |
-| `q` / `Esc` | Back out of zoom if zoomed; otherwise close the viewer and return to the prior pane. With annotations held, a confirm appears first (`y` copies them and quits, `q` quits and discards, `Esc` returns to the viewer): they are session-only, so quitting destroys them. Skip it with `confirm_discard = false` |
+| `q` / `Esc` | Back out of zoom if zoomed; otherwise close the viewer and return to the prior pane. While pinned these keys cannot perform the final close; click `[x]` or unpin first. With annotations held, a confirm appears before closing |
 
 These are the **default global** keys. Remap them with a `[keys]` table in the
 [config file](configuration.md#keybindings). Keys handled inside line-select mode, the annotation
 editor/overview, and other modals are fixed and not remappable; remapping global `a` or `A` does not
 change a modal's local controls.
+
+Capital-letter bindings such as `C`, `D`, `H`, `L`, `N`, `O`, `R`, `W`, `Y`, and `Z` mean
+Shift plus that letter; they remain distinct from their lowercase bindings.
 
 `Tab` to the content pane, then the arrow keys (or `h`/`j`/`k`/`l`) scroll it in all four
 directions; `Tab` back to the tree to move between files. Long lines wrap in prose (markdown /
@@ -119,6 +124,9 @@ The viewer is keyboard-first; the mouse is additive and on by default:
 | **Click** a tree row | Select it (focus the tree) |
 | **Right-click** a tree row | Open the context menu of actions for that node (including open workspace, reveal in file manager, copy path) |
 | **Double-click** a folder | Expand / collapse it (same as `Enter`) |
+| **Click `[-]` in the tree header** | Collapse every open directory from the tree root |
+| **Click `[p]` / `[P]` in the tree header** | Pin / unpin the viewer (`[P]` means pinned) |
+| **Click `[x]` in the tree header** | Explicitly close the viewer, even while pinned |
 | **Double-click** a file | Open it in **zoom mode**: content full-screen (same as `Enter`); the editor is the `e` key |
 | **Double-click** the content title | Toggle zoom: hide or show the tree (same as `z`). The filename sits on the content pane’s top border, so this works even when the tree is already hidden |
 | **Wheel** over the content pane | Scroll it vertically; over the tree, move the selection |

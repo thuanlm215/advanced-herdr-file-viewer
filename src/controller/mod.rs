@@ -608,6 +608,8 @@ pub struct Controller {
     /// Seeded at startup via [`apply_tree_max_cols`](Self::apply_tree_max_cols); read by the
     /// Presenter through the view state. Carried across a re-root (like `split_pct`).
     tree_max_cols: u16,
+    /// File/folder icon style used by the tree presenter.
+    tree_icons: crate::config::TreeIcons,
     /// Whether the user has resized the split by hand this session (grow/shrink keys or a divider
     /// drag). `tree_max_cols` caps the tree only while this is `false`; the first manual resize seeds
     /// `split_pct` from the currently-displayed width and lifts the cap, so the resize is honoured
@@ -623,6 +625,8 @@ pub struct Controller {
     /// Hide the tree so the content pane fills the frame (the `z` zoom toggle). Pure layout
     /// state — the selection and rendered content are unchanged.
     zoomed: bool,
+    /// Guard against accidental base-layer close keys. Host-level pane closure remains authoritative.
+    pinned: bool,
     /// Whether **this viewer** currently holds the pane in full-screen via `Z`
     /// ([`Intent::OpenFullscreen`]). Owned intent, not a herdr query: it drives the `Z` toggle and,
     /// crucially, lets every exit path (a second `Z`, `Esc`/`q`, `z`, a re-root, quit) release the
@@ -878,9 +882,11 @@ impl Controller {
             split_pct: SPLIT_DEFAULT,
             tree_position: crate::config::TreePosition::Left,
             tree_max_cols: crate::config::DEFAULT_TREE_MAX_COLS,
+            tree_icons: crate::config::TreeIcons::default(),
             split_manual: false,
             wrap_override: None,
             zoomed: false,
+            pinned: false,
             host_zoomed: false,
             changed: BTreeMap::new(),
             overrides: HashMap::new(),
@@ -1524,6 +1530,11 @@ impl Controller {
         self.tree_max_cols = cols.max(crate::config::MIN_TREE_MAX_COLS);
     }
 
+    /// Seed the startup file/folder icon style from config.
+    pub fn apply_tree_icons(&mut self, icons: crate::config::TreeIcons) {
+        self.tree_icons = icons;
+    }
+
     /// Record the content viewport `(width, height)` the Presenter last drew into, so content
     /// scrolling can be clamped to it. Called by the run loop after each draw.
     ///
@@ -1655,8 +1666,10 @@ impl Controller {
             split_pct: self.split_pct,
             tree_position: self.tree_position,
             tree_max_cols: self.tree_max_cols,
+            tree_icons: self.tree_icons,
             split_manual: self.split_manual,
             zoomed: self.zoomed,
+            pinned: self.pinned,
             update_banner: self.update_banner(),
             picker: self.picker_view(),
             finder: self.finder_view(),
@@ -1882,6 +1895,7 @@ impl Controller {
             Intent::NavDown => self.navigate(1),
             Intent::Expand => self.expand(),
             Intent::Collapse => self.collapse(),
+            Intent::CollapseAll => self.collapse_all(),
             Intent::Activate => self.activate(),
             Intent::OpenFullscreen => self.open_fullscreen(),
             Intent::ToggleIgnore => self.toggle_ignore(),
@@ -1903,6 +1917,7 @@ impl Controller {
             Intent::GrowTree => self.resize_split(SPLIT_STEP as i16),
             Intent::ToggleWrap => self.toggle_wrap(),
             Intent::ToggleZoom => self.toggle_zoom(),
+            Intent::TogglePin => self.toggle_pin(),
             Intent::Refresh => self.refresh(),
             Intent::DismissUpdate => self.dismiss_update(),
             Intent::SwitchWorktree => self.open_worktree_picker(),
@@ -2115,6 +2130,34 @@ impl Controller {
             return Effects::redraw();
         }
         Effects::noop()
+    }
+
+    fn collapse_all(&mut self) -> Effects {
+        if self.focus != Focus::Tree {
+            return Effects::noop();
+        }
+        if self.changed_only || self.status_mode {
+            self.action_notice =
+                Some("Collapse all is unavailable while a changed-files filter is active.".into());
+            return Effects::redraw();
+        }
+        self.tree.collapse_all();
+        self.tree_hscroll = 0;
+        self.dispatch_render();
+        Effects::redraw()
+    }
+
+    fn toggle_pin(&mut self) -> Effects {
+        self.pinned = !self.pinned;
+        self.action_notice = Some(
+            if self.pinned {
+                "Viewer pinned — close keys will not quit the pane."
+            } else {
+                "Viewer unpinned."
+            }
+            .into(),
+        );
+        Effects::redraw()
     }
 
     /// Activate the selected node (Enter / double-click): a directory toggles expand/collapse;
@@ -2506,6 +2549,17 @@ impl Controller {
             self.leave_host_zoom();
             return Effects::redraw();
         }
+        if self.pinned {
+            self.action_notice =
+                Some("Viewer is pinned. Click [x] or unpin it before closing with q/Esc.".into());
+            return Effects::redraw();
+        }
+        self.close_explicitly()
+    }
+
+    /// Close requested through the explicit header button. Unlike a close key, this intentionally
+    /// bypasses the pin guard, while retaining the annotation-discard confirmation.
+    fn close_explicitly(&mut self) -> Effects {
         // Annotations are session-only, so quitting destroys them. Confirm first rather than lose
         // work to a stray `q`. The outermost layer, after search/unzoom have had their turn.
         // Opt out with `confirm_discard = false`.
@@ -3192,6 +3246,9 @@ pub(super) enum ClickOrigin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MouseRegion {
     TreeRow(usize),
+    TreeCollapseButton,
+    TreePinButton,
+    TreeCloseButton,
     Content,
     /// The content column's top-border title (filename). Double-click toggles zoom (#106).
     ContentTitle,

@@ -95,6 +95,8 @@ pub struct ViewState {
     /// drawn at `min(split_pct% of the pane, tree_max_cols)`, so on a very wide pane it stops
     /// growing instead of over-allocating. Used only in the wide two-column layout.
     pub tree_max_cols: u16,
+    /// File/folder icon style for tree rows.
+    pub tree_icons: crate::config::TreeIcons,
     /// Whether the user has resized the split by hand this session (a divider drag or the
     /// grow/shrink keys). While `false`, `tree_max_cols` caps the tree; once `true` the cap is
     /// lifted so an explicit resize is honoured exactly (otherwise the resize would look frozen on a
@@ -103,6 +105,8 @@ pub struct ViewState {
     /// Hide the tree and let the content pane fill the whole frame (the `z` zoom toggle).
     /// Overrides the split — and the narrow-layout focus rule — to draw content only.
     pub zoomed: bool,
+    /// Whether close keys are guarded at the base layer.
+    pub pinned: bool,
     /// When `Some`, a one-row "update available" status line is drawn across the bottom of the
     /// frame (the columns take the remaining rows). `None` ⇒ no footer, layout unchanged.
     pub update_banner: Option<String>,
@@ -460,10 +464,10 @@ fn row_color(node: &Node) -> Option<Color> {
 /// the controller's horizontal-scroll clamp. Computed from the same [`tree_row`] the tree draws
 /// (selection-independent: the REVERSED highlight doesn't change a row's width), so the drawn
 /// rows and the hit-test/clamp can never disagree.
-fn tree_rows_max_width(nodes: &[Node]) -> usize {
+fn tree_rows_max_width(nodes: &[Node], icons: crate::config::TreeIcons) -> usize {
     nodes
         .iter()
-        .map(|n| tree_row(n, false, false).width())
+        .map(|n| tree_row(n, false, false, icons).width())
         .max()
         .unwrap_or(0)
 }
@@ -473,12 +477,62 @@ const ANNOTATION_STYLE: Style = Style::new().bg(Color::DarkGray);
 
 /// Render one tree row: `<git><annotation><indent><glyph><name>`. The annotation marker replaces
 /// the reserved blank prefix cell, so git coexistence and row geometry stay unchanged.
-fn tree_row(node: &Node, selected: bool, annotated: bool) -> Line<'static> {
-    let glyph = match node.kind {
-        NodeKind::Dir if node.expanded => "▾ ",
-        NodeKind::Dir => "▸ ",
-        NodeKind::File => "",
-    };
+fn tree_icon(node: &Node, mode: crate::config::TreeIcons) -> (&'static str, Option<Color>) {
+    use crate::config::TreeIcons;
+    if mode == TreeIcons::Off {
+        return match node.kind {
+            NodeKind::Dir if node.expanded => ("▾ ", None),
+            NodeKind::Dir => ("▸ ", None),
+            NodeKind::File => ("", None),
+        };
+    }
+    if node.kind == NodeKind::Dir {
+        return match mode {
+            TreeIcons::Unicode if node.expanded => ("▾ ▣ ", Some(Color::LightBlue)),
+            TreeIcons::Unicode => ("▸ ▣ ", Some(Color::LightBlue)),
+            TreeIcons::Nerd if node.expanded => ("▾  ", Some(Color::LightBlue)),
+            TreeIcons::Nerd => ("▸  ", Some(Color::LightBlue)),
+            TreeIcons::Off => unreachable!(),
+        };
+    }
+    let name = node
+        .path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    let ext = node
+        .path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("");
+    match mode {
+        TreeIcons::Unicode => match ext {
+            "rs" => ("◆ ", Some(Color::LightRed)),
+            "md" | "mdx" => ("≡ ", Some(Color::LightBlue)),
+            "json" | "toml" | "yaml" | "yml" => ("⚙ ", Some(Color::Yellow)),
+            _ => ("· ", Some(Color::DarkGray)),
+        },
+        TreeIcons::Nerd => match (name, ext) {
+            (_, "rs") => (" ", Some(Color::LightRed)),
+            (_, "md" | "mdx") => (" ", Some(Color::LightBlue)),
+            (_, "json") => (" ", Some(Color::Yellow)),
+            (_, "toml") => (" ", Some(Color::Yellow)),
+            (_, "yaml" | "yml") => (" ", Some(Color::Yellow)),
+            (".gitignore" | ".gitattributes" | ".gitmodules", _) => (" ", Some(Color::LightRed)),
+            ("Cargo.lock" | "Cargo.toml", _) => (" ", Some(Color::LightRed)),
+            _ => (" ", Some(Color::Gray)),
+        },
+        TreeIcons::Off => unreachable!(),
+    }
+}
+
+fn tree_row(
+    node: &Node,
+    selected: bool,
+    annotated: bool,
+    icons: crate::config::TreeIcons,
+) -> Line<'static> {
+    let (glyph, glyph_color) = tree_icon(node, icons);
     let annotated = annotated && node.kind == NodeKind::File;
     let mut row_style = Style::new();
     if let Some(color) = row_color(node) {
@@ -488,11 +542,10 @@ fn tree_row(node: &Node, selected: bool, annotated: bool) -> Line<'static> {
         row_style = row_style.add_modifier(Modifier::REVERSED);
     }
     let prefix = format!(
-        "{}{}{}{}",
+        "{}{}{}",
         status_marker(node),
         if annotated { '@' } else { ' ' },
         "  ".repeat(node.depth),
-        glyph,
     );
     let name_style = if annotated && !selected {
         row_style.patch(ANNOTATION_STYLE)
@@ -501,8 +554,30 @@ fn tree_row(node: &Node, selected: bool, annotated: bool) -> Line<'static> {
     };
     Line::from(vec![
         Span::styled(prefix, row_style),
+        Span::styled(
+            glyph,
+            glyph_color.map_or(row_style, |color| row_style.fg(color)),
+        ),
         Span::styled(sanitize_control(&node_name(node)), name_style),
     ])
+}
+
+const TREE_HEADER_BUTTONS_WIDTH: u16 = 11;
+
+fn tree_header_buttons(area: Rect) -> Option<(Rect, Rect, Rect)> {
+    // Keep enough room for borders plus the fallback "Files" title and one separator cell.
+    if area.width < TREE_HEADER_BUTTONS_WIDTH + 8 || area.height == 0 {
+        return None;
+    }
+    let x = area
+        .x
+        .saturating_add(area.width)
+        .saturating_sub(1 + TREE_HEADER_BUTTONS_WIDTH);
+    Some((
+        Rect::new(x, area.y, 3, 1),
+        Rect::new(x + 4, area.y, 3, 1),
+        Rect::new(x + 8, area.y, 3, 1),
+    ))
 }
 
 /// Build a [`ScrollbarState`] that places the thumb correctly for a **scroll offset** (not a list
@@ -967,7 +1042,10 @@ fn draw_tree(frame: &mut Frame, area: Rect, state: &ViewState) {
     let title = if name.is_empty() {
         "Files".to_string()
     } else {
-        truncate_title(&name, area.width)
+        truncate_title(
+            &name,
+            area.width.saturating_sub(TREE_HEADER_BUTTONS_WIDTH + 1),
+        )
     };
     let mut block = Block::bordered()
         .title(title)
@@ -995,6 +1073,7 @@ fn draw_tree(frame: &mut Frame, area: Rect, state: &ViewState) {
                     .annotation_indicators
                     .annotated_files
                     .contains(&node.path),
+                state.tree_icons,
             )
         })
         .collect();
@@ -1004,7 +1083,16 @@ fn draw_tree(frame: &mut Frame, area: Rect, state: &ViewState) {
     // lets long / deeply-nested rows be read sideways (`H`/`L` scroll the tree; ←/→ are
     // expand/collapse in the tree).
     // `geometry` recomputes the SAME layout + offset, so hit-testing agrees with what is drawn.
-    let max_width = tree_rows_max_width(&state.nodes);
+    if let Some((collapse, pin, close)) = tree_header_buttons(area) {
+        frame.render_widget(Paragraph::new("[-]"), collapse);
+        frame.render_widget(
+            Paragraph::new(if state.pinned { "[P]" } else { "[p]" }),
+            pin,
+        );
+        frame.render_widget(Paragraph::new("[x]"), close);
+    }
+
+    let max_width = tree_rows_max_width(&state.nodes, state.tree_icons);
     let (text, vbar, hbar) = tree_bars(inner, state.nodes.len(), max_width);
     let offset = sticky_scroll_offset(
         state.selected,
@@ -1321,6 +1409,10 @@ pub struct PaneGeometry {
     pub area_x: u16,
     pub area_width: u16,
     pub tree_inner: Option<Rect>,
+    /// Click targets drawn into the tree's top border.
+    pub tree_collapse_button: Option<Rect>,
+    pub tree_pin_button: Option<Rect>,
+    pub tree_close_button: Option<Rect>,
     /// The tree's vertical scroll offset (first visible node index) on the last drawn frame —
     /// the same value [`draw_tree`] scrolled by. Hit-testing adds it to map a screen row to the
     /// node actually drawn there. `0` when every node fits.
@@ -1405,7 +1497,7 @@ pub fn geometry(area: Rect, state: &ViewState) -> PaneGeometry {
     // to the row actually drawn and a press lands on the bar actually shown. The scroll offset is
     // derived identically (over the reduced text height + last frame's offset). Saturating casts:
     // an absurd >65535 value clamps instead of wrapping.
-    let max_width = tree_rows_max_width(&state.nodes);
+    let max_width = tree_rows_max_width(&state.nodes, state.tree_icons);
     let (tree_inner, tree_vbar, tree_hbar) = match tree.map(inner) {
         Some(ti) => {
             let (text, v, h) = tree_bars(ti, state.nodes.len(), max_width);
@@ -1488,10 +1580,19 @@ pub fn geometry(area: Rect, state: &ViewState) -> PaneGeometry {
         None => (None, 0, 0, None, Vec::new()),
     };
 
+    let (tree_collapse_button, tree_pin_button, tree_close_button) = tree
+        .and_then(tree_header_buttons)
+        .map_or((None, None, None), |(collapse, pin, close)| {
+            (Some(collapse), Some(pin), Some(close))
+        });
+
     PaneGeometry {
         area_x: body.x,
         area_width: body.width,
         tree_inner,
+        tree_collapse_button,
+        tree_pin_button,
+        tree_close_button,
         tree_scroll,
         tree_content_width,
         tree_vbar,

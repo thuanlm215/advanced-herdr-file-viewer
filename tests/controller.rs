@@ -1005,6 +1005,58 @@ fn close_intent_signals_quit() {
 }
 
 #[test]
+fn pin_blocks_only_the_final_close_layer_until_unpinned() {
+    let dir = TempDir::new();
+    let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
+
+    ctrl.handle(Intent::TogglePin);
+    assert!(ctrl.view_state().pinned);
+    let blocked = ctrl.handle(Intent::Close);
+    assert!(!blocked.quit, "a pinned viewer survives close keys");
+    assert!(
+        ctrl.notices()
+            .iter()
+            .any(|notice| notice.contains("pinned"))
+    );
+
+    ctrl.handle(Intent::TogglePin);
+    assert!(!ctrl.view_state().pinned);
+    assert!(ctrl.handle(Intent::Close).quit);
+}
+
+#[test]
+fn collapse_all_returns_a_deep_selection_to_its_root_child() {
+    let dir = TempDir::new();
+    std::fs::create_dir_all(dir.path().join("src/inner")).unwrap();
+    std::fs::write(dir.path().join("src/inner/deep.rs"), "x").unwrap();
+    let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
+
+    ctrl.handle(Intent::Expand);
+    ctrl.handle(Intent::NavDown);
+    ctrl.handle(Intent::Expand);
+    ctrl.handle(Intent::NavDown);
+    assert_eq!(
+        ctrl.tree().selected().unwrap().path,
+        dir.path().join("src/inner/deep.rs")
+    );
+    assert!(
+        ctrl.tree()
+            .visible_nodes()
+            .iter()
+            .any(|node| node.depth > 0)
+    );
+    ctrl.handle(Intent::CollapseAll);
+
+    assert!(
+        ctrl.tree()
+            .visible_nodes()
+            .iter()
+            .all(|node| node.depth == 0)
+    );
+    assert_eq!(ctrl.tree().selected().unwrap().path, dir.path().join("src"));
+}
+
+#[test]
 fn close_backs_out_of_zoom_first_then_quits() {
     // When zoomed, the close key (q/Esc) backs out of zoom rather than quitting — the
     // instinctive "escape the full-screen view". A second press (now un-zoomed) quits (AC-20).
@@ -1716,6 +1768,9 @@ fn wide_geometry() -> PaneGeometry {
             width: 38,
             height: 20,
         }),
+        tree_collapse_button: Some(Rect::new(28, 0, 3, 1)),
+        tree_pin_button: Some(Rect::new(32, 0, 3, 1)),
+        tree_close_button: Some(Rect::new(36, 0, 3, 1)),
         tree_scroll: 0,
         tree_content_width: 0,
         tree_vbar: None,
@@ -1748,6 +1803,22 @@ fn wide_geometry() -> PaneGeometry {
         help_tabs: Vec::new(),
         context_menu_rect: None,
     }
+}
+
+#[test]
+fn tree_header_buttons_toggle_pin_and_close_explicitly() {
+    let dir = TempDir::new();
+    let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
+    ctrl.set_pane_geometry(wide_geometry());
+
+    ctrl.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left), 33, 0));
+    let pin = ctrl.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 33, 0));
+    assert!(pin.redraw);
+    assert!(ctrl.view_state().pinned);
+
+    ctrl.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left), 37, 0));
+    let close = ctrl.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 37, 0));
+    assert!(close.quit, "the explicit [x] button bypasses the pin guard");
 }
 
 #[test]
@@ -9926,6 +9997,7 @@ fn open_help_appends_settings_section_when_display_is_set() {
         tree_width: 30,
         tree_position: herdr_file_viewer::config::TreePosition::Left,
         tree_max_cols: 45,
+        file_icons: herdr_file_viewer::config::TreeIcons::Unicode,
         preview_max_lines: 5000,
         preview_max_kib: 1024,
     };

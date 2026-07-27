@@ -275,6 +275,7 @@ pub fn settings_text(
          tree_width        = {tree_width}\n\
          tree_position     = {tree_position}\n\
          tree_max_cols     = {tree_max_cols}\n\
+         file_icons        = {file_icons}\n\
          preview_max_lines = {preview_max_lines}\n\
          preview_max_kib   = {preview_max_kib}",
         open = open,
@@ -286,6 +287,7 @@ pub fn settings_text(
         tree_width = eff.tree_width,
         tree_position = eff.tree_position.label(),
         tree_max_cols = eff.tree_max_cols,
+        file_icons = eff.file_icons.label(),
         preview_max_lines = eff.preview_max_lines,
         preview_max_kib = eff.preview_max_kib,
     )
@@ -780,6 +782,7 @@ mod tests {
             tree_width: 25,
             tree_position: crate::config::TreePosition::Right,
             tree_max_cols: 50,
+            file_icons: crate::config::TreeIcons::Unicode,
             preview_max_lines: 8000,
             preview_max_kib: 2048,
         }
@@ -816,6 +819,7 @@ mod tests {
             "tree_width",
             "tree_position",
             "tree_max_cols",
+            "file_icons",
             "preview_max_lines",
             "preview_max_kib",
         ] {
@@ -960,6 +964,7 @@ mod tests {
             ),
             &format!("tree_width        = {}", crate::config::DEFAULT_TREE_WIDTH),
             "tree_position     = left",
+            "file_icons        = unicode",
             &format!(
                 "tree_max_cols     = {}",
                 crate::config::DEFAULT_TREE_MAX_COLS

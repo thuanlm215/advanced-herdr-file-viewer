@@ -251,6 +251,19 @@ impl Controller {
         let region = self.hit_test(col, row);
         let now = Instant::now();
         match region {
+            MouseRegion::TreeCollapseButton => {
+                self.last_click = None;
+                self.focus = Focus::Tree;
+                self.collapse_all()
+            }
+            MouseRegion::TreePinButton => {
+                self.last_click = None;
+                self.toggle_pin()
+            }
+            MouseRegion::TreeCloseButton => {
+                self.last_click = None;
+                self.close_explicitly()
+            }
             MouseRegion::TreeRow(idx) => {
                 if idx >= self.tree.visible_nodes().len() {
                     self.last_click = None; // empty area below the nodes — inert, and breaks any
@@ -489,6 +502,27 @@ impl Controller {
         // are present only when that bar is drawn — so a hit on a `Some` track is a real bar. Check
         // them before the text rects. The tree's vertical bar no longer shares the divider column.
         let pos = Position { x: col, y: row };
+        if self
+            .geom
+            .tree_collapse_button
+            .is_some_and(|rect| rect.contains(pos))
+        {
+            return MouseRegion::TreeCollapseButton;
+        }
+        if self
+            .geom
+            .tree_pin_button
+            .is_some_and(|rect| rect.contains(pos))
+        {
+            return MouseRegion::TreePinButton;
+        }
+        if self
+            .geom
+            .tree_close_button
+            .is_some_and(|rect| rect.contains(pos))
+        {
+            return MouseRegion::TreeCloseButton;
+        }
         if self.geom.content_vbar.is_some_and(|r| r.contains(pos)) {
             return MouseRegion::ContentVBar;
         }

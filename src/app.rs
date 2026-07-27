@@ -129,6 +129,7 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     controller.apply_tree_width(eff.tree_width);
     controller.apply_tree_position(eff.tree_position);
     controller.apply_tree_max_cols(eff.tree_max_cols);
+    controller.apply_tree_icons(eff.file_icons);
     // Launch open target (GH #109): CLI `--open` wins over `HERDR_FILE_VIEWER_OPEN`. Applied
     // after layout/config wiring so reveal + render see the same filters as a live session.
     // Soft-fails with an action notice; never aborts startup.
@@ -375,13 +376,17 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                     }
                     dirty |= fx.redraw;
                 }
-                // Mouse input (capture is enabled in `run`): clicks select / activate, the
-                // wheel scrolls, dragging the divider resizes. It never quits the viewer.
+                // Mouse input (capture is enabled in `run`): clicks select / activate, the wheel
+                // scrolls, dragging the divider resizes, and the explicit tree-header close button
+                // may quit.
                 Event::Mouse(me) => {
                     let fx = controller.handle_mouse(me);
                     if fx.clear {
                         let _ = terminal.clear();
                         dirty = true;
+                    }
+                    if fx.quit {
+                        return Ok(());
                     }
                     dirty |= fx.redraw;
                 }

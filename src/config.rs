@@ -91,6 +91,25 @@ impl TreePosition {
     }
 }
 
+/// File-tree icon style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TreeIcons {
+    Off,
+    #[default]
+    Unicode,
+    Nerd,
+}
+
+impl TreeIcons {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Unicode => "unicode",
+            Self::Nerd => "nerd",
+        }
+    }
+}
+
 /// A `[keys]` entry's value: the key(s) an intent binds to, written **either** as a single string
 /// (`refresh = "g"`) **or** as a TOML array of strings (`nav_up = ["w", "Up"]`). `#[serde(untagged)]`
 /// tries the variants in order, so `One(String)` must come first: a bare string deserializes to
@@ -146,6 +165,8 @@ pub struct Config {
     /// out-of-`u16` number clamps into range instead of tripping the parse; only a negative /
     /// non-integer value fails to parse and degrades the whole config to defaults.
     pub tree_max_cols: Option<u32>,
+    /// Tree icon style: `off`, `unicode`, or `nerd` (which requires a Nerd Font).
+    pub file_icons: Option<String>,
     /// The **content preview line cap**: past this many lines a file (or a large diff) is shown as a
     /// truncated preview plus a notice, not whole (AC-13). `None` falls back to
     /// [`DEFAULT_PREVIEW_MAX_LINES`]; the resolver clamps a present value into
@@ -285,6 +306,8 @@ pub struct EffectiveSettings {
     /// `MIN_TREE_MAX_COLS..=MAX_TREE_MAX_COLS` when present, else [`DEFAULT_TREE_MAX_COLS`]. The tree
     /// is drawn at `min(tree_width% of the pane, tree_max_cols)`. Config-or-default (no env var).
     pub tree_max_cols: u16,
+    /// Effective tree icon style.
+    pub file_icons: TreeIcons,
     /// The effective **content preview line cap**: the config `preview_max_lines` clamped to
     /// `MIN_PREVIEW_MAX_LINES..=MAX_PREVIEW_MAX_LINES` when present, else [`DEFAULT_PREVIEW_MAX_LINES`].
     /// Wired into the Content Renderer's [`crate::render::Caps`] via [`Self::preview_caps`].
@@ -389,6 +412,17 @@ pub fn resolve(config: &Config, get_env: impl Fn(&str) -> Option<String>) -> Eff
         .map(|n| n.clamp(MIN_TREE_MAX_COLS as u32, MAX_TREE_MAX_COLS as u32) as u16)
         .unwrap_or(DEFAULT_TREE_MAX_COLS);
 
+    let file_icons = match config
+        .file_icons
+        .as_deref()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("off") => TreeIcons::Off,
+        Some("nerd") => TreeIcons::Nerd,
+        _ => TreeIcons::Unicode,
+    };
+
     // Config > default; no env var. Clamp to `MIN_PREVIEW_MAX_LINES..=MAX_PREVIEW_MAX_LINES` so a
     // preview can never truncate to near-nothing, and a huge cap can't wedge the render pipeline. A
     // non-representable value degraded the whole config to defaults and arrived as `None`.
@@ -419,6 +453,7 @@ pub fn resolve(config: &Config, get_env: impl Fn(&str) -> Option<String>) -> Eff
         tree_width,
         tree_position,
         tree_max_cols,
+        file_icons,
         preview_max_lines,
         preview_max_kib,
     }
@@ -1140,6 +1175,26 @@ mod tests {
                 "{value:?} must resolve to {want:?}"
             );
         }
+    }
+
+    #[test]
+    fn resolve_file_icons_supports_all_modes_and_safe_default() {
+        for (value, expected) in [
+            ("off", TreeIcons::Off),
+            (" Unicode ", TreeIcons::Unicode),
+            ("NERD", TreeIcons::Nerd),
+            ("unknown", TreeIcons::Unicode),
+        ] {
+            let cfg = Config {
+                file_icons: Some(value.to_string()),
+                ..Config::default()
+            };
+            assert_eq!(resolve(&cfg, |_| None).file_icons, expected);
+        }
+        assert_eq!(
+            resolve(&Config::default(), |_| None).file_icons,
+            TreeIcons::Unicode
+        );
     }
 
     #[test]

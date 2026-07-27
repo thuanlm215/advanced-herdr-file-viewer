@@ -40,7 +40,7 @@ A config key always wins. Only two keys also have an environment-variable fallba
 config key and above the built-in default — `editor` (`$EDITOR`) and `update_check`
 (`$HERDR_FILE_VIEWER_NO_UPDATE_CHECK`) — giving those two a `config > env > default` chain. Every
 other key (`markdown`, `diff`, `syntax`, `open`, `reveal`, `hide_dotfiles`, `confirm_discard`,
-`scroll_lines`, `tree_width`, `tree_position`, `tree_max_cols`, `preview_max_lines`,
+`scroll_lines`, `tree_width`, `tree_position`, `tree_max_cols`, `file_icons`, `preview_max_lines`,
 `preview_max_kib`) has no
 applicable environment variable; for those it's `config > default` only.
 
@@ -65,6 +65,7 @@ scroll_lines = 3            # mouse-wheel step (content/search/help), a 1 to 10 
 tree_width = 30             # tree column's share of the viewer pane, percent 20-80 (content takes the rest)
 tree_max_cols = 30          # HARD CAP in columns; the SMALLER of this and tree_width% wins (raise both to widen)
 tree_position = "left"      # which side the directory tree sits on: "left" (default) or "right"
+file_icons = "unicode"      # "unicode" (default), "nerd" (Nerd Font required), or "off"
 
 preview_max_lines = 10000   # show at most this many lines before a truncated preview (100–100000)
 preview_max_kib = 1024      # ...or this size before truncating, in KiB (1024 = 1 MB; 64–65536)
@@ -79,6 +80,10 @@ instead of a mostly-blank tree (it only bites past ~100 columns). `tree_position
 the `left` (default) or `right`. All three set the **startup** split inside the viewer's own pane
 (not the herdr pane, which the host decides); you can still resize live with the grow/shrink keys or
 by dragging the divider, and an explicit resize lifts the cap.
+
+`file_icons` controls the glyphs before tree entries: `unicode` is the portable default, `nerd`
+uses colored Devicon-style glyphs and requires a Nerd Font in the terminal, and `off` restores the
+compact text-only rows.
 
 `preview_max_lines` and `preview_max_kib` cap how much of a file the content pane shows: a file is
 displayed in full until it exceeds **either** cap, then the pane shows a truncated preview with a
@@ -143,6 +148,7 @@ customized).
 | | `nav_down` | `Down`, `j` | Move the tree cursor down one row |
 | | `expand` | `Right`, `l` | Expand the selected directory |
 | | `collapse` | `Left`, `h` | Collapse the selected directory |
+| | `collapse_all` | `C` | Collapse every open directory from the tree root |
 | | `activate` | `Enter` | Activate the selection: expand/collapse a directory, or open a file |
 | **View & layout** | `open_fullscreen` | `Z` | Toggle full-screen reading of the selected file |
 | | `cycle_view` | `v` | Cycle the content pane's view mode |
@@ -175,12 +181,14 @@ customized).
 | | `next_match` | `n` | Jump to the next search match (wraps) |
 | | `prev_match` | `N` | Jump to the previous search match (wraps) |
 | **Session** | `dismiss_update` | `u` | Dismiss the update-available banner for this session |
+| | `toggle_pin` | `p` | Pin/unpin the viewer so close keys cannot quit it accidentally |
 | | `switch_worktree` | `W` | Open the worktree picker to re-root at another git worktree |
 | | `show_help` | `?` | Open the in-app help overlay (What's New and About) |
 | | `close` | `q`, `Esc` | Close the viewer and return to the prior pane |
 
-`Esc` always closes the viewer even if you rebind `close` — that floor can't be rebound away (see
-below). Keys handled inside a modal are fixed and not remappable. That includes line-select `a`
+`Esc` always reaches the layered close action even if you rebind `close` — that floor can't be
+rebound away. While pinned, its final pane-close step is guarded. Keys handled inside a modal are
+fixed and not remappable. That includes line-select `a`
 (add an annotation for the selected line/range), annotation-editor `←`/`→`/`Home`/`End`/`Enter`/`Esc`,
 and annotation-overview `j`/`k`/arrows, `Enter`/`e`, `d`, uppercase `D`, `y`, `Esc`/`q`, as well as
 the finder and `:` / `/` prompts. Remapping a global action never changes these local modal keys.

@@ -48,8 +48,10 @@ fn state(width: u16, focus: Focus) -> ViewState {
         split_pct: 40,
         tree_position: herdr_file_viewer::config::TreePosition::Left,
         tree_max_cols: 1000, // high cap: percentage governs (narrow-layout tests ignore it anyway)
+        tree_icons: herdr_file_viewer::config::TreeIcons::Off,
         split_manual: false,
         zoomed: false,
+        pinned: false,
         update_banner: None,
         picker: None,
         finder: None,

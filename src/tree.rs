@@ -276,6 +276,30 @@ impl TreeModel {
         self.clamp_cursor();
     }
 
+    /// Collapse every expanded directory and keep the selection on the top-level ancestor of the
+    /// previously selected node. The root itself is not a visible row, so the resulting tree shows
+    /// only its immediate children.
+    pub fn collapse_all(&mut self) {
+        let selected = self.selected().map(|node| node.path);
+        self.expanded.clear();
+        let Some(selected) = selected else {
+            self.cursor = 0;
+            return;
+        };
+        let top_level = selected
+            .strip_prefix(&self.root)
+            .ok()
+            .and_then(|relative| relative.components().next())
+            .map(|component| self.root.join(component.as_os_str()));
+        self.cursor = top_level
+            .and_then(|path| {
+                self.visible_nodes()
+                    .iter()
+                    .position(|node| node.path == path)
+            })
+            .unwrap_or(0);
+    }
+
     /// Set the cursor to an absolute visible-row index, clamped to the visible range (used by
     /// a mouse click that selects the row it landed on).
     pub fn set_cursor(&mut self, idx: usize) {
