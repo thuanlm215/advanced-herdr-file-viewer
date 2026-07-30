@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are short on purpose; follow the
 `→` links for the full detail.
 
-## [Unreleased]
+## [1.18.0] - 2026-07-30
 
 ### Added
 - Tree-header buttons collapse the whole tree, pin the viewer against accidental close keys, and explicitly close it; `C` and `p` provide keyboard access. → [keys](docs/keys.md)
