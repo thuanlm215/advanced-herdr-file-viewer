@@ -266,6 +266,10 @@ pub struct CharSelView {
 pub struct FinderView {
     /// The current query text drawn on the input line.
     pub query: String,
+    /// Active scope label (`workspace` or the selected folder's root-relative path).
+    pub scope_label: String,
+    /// Whether the active candidate list covers the whole workspace.
+    pub workspace: bool,
     /// Matched root-relative paths, ranked best-first. Empty when the query is empty (AC-2).
     pub matches: Vec<String>,
     /// Index into `matches` of the highlighted row.
@@ -1536,6 +1540,8 @@ pub struct PaneGeometry {
     /// when the match rows overflow. `None` when the finder is closed or every row fits. Lets the
     /// controller map a press/drag on the bar to a selection position (click-drag scroll).
     pub finder_vbar: Option<Rect>,
+    /// Click target for the file finder's `[Workspace]` / `[Selection]` scope button.
+    pub finder_scope_button: Option<Rect>,
     /// Full-text search result area and its visible offset in two-line match records.
     pub workspace_search_rows: Option<Rect>,
     pub workspace_search_scroll: u16,
@@ -1629,18 +1635,20 @@ pub fn geometry(area: Rect, state: &ViewState) -> PaneGeometry {
     // Finder: if the finder overlay is open, compute its layout with the same helper
     // `draw_finder_overlay` uses (same `area` = `frame.area()` = the full terminal rect),
     // so the hit-test geometry agrees with what is drawn.
-    let (finder_rows, finder_scroll, finder_max_hscroll, finder_vbar) = match &state.finder {
-        Some(finder) => {
-            let fl = finder_overlay_layout(area, finder, state.tree_icons);
-            (
-                fl.rows_area,
-                fl.offset.min(u16::MAX as usize) as u16,
-                fl.max_hscroll,
-                fl.vbar,
-            )
-        }
-        None => (None, 0, 0, None),
-    };
+    let (finder_rows, finder_scroll, finder_max_hscroll, finder_vbar, finder_scope_button) =
+        match &state.finder {
+            Some(finder) => {
+                let fl = finder_overlay_layout(area, finder, state.tree_icons);
+                (
+                    fl.rows_area,
+                    fl.offset.min(u16::MAX as usize) as u16,
+                    fl.max_hscroll,
+                    fl.vbar,
+                    fl.scope_button,
+                )
+            }
+            None => (None, 0, 0, None, None),
+        };
 
     let (workspace_search_rows, workspace_search_scroll, workspace_search_scope_button) =
         match &state.workspace_search {
@@ -1701,6 +1709,7 @@ pub fn geometry(area: Rect, state: &ViewState) -> PaneGeometry {
         finder_scroll,
         finder_max_hscroll,
         finder_vbar,
+        finder_scope_button,
         workspace_search_rows,
         workspace_search_scroll,
         workspace_search_scope_button,
@@ -2101,7 +2110,7 @@ fn picker_row(row: &PickerRowView, selected: bool) -> Line<'static> {
 const FINDER_TITLE: &str = "Go to file";
 /// The herdr-style key-hint footer on the bottom border — the finder's real bindings, including
 /// the horizontal scroll keys (←→) added alongside the result-row hscroll feature.
-const FINDER_FOOTER_HINT: &str = "↑↓ move · ←→ scroll · ⏎ open · esc cancel";
+const FINDER_FOOTER_HINT: &str = "Tab scope · ↑↓ move · ←→ scroll · Enter open · Esc close";
 /// The prompt prefix shown on the query-input line.
 const FINDER_PROMPT: &str = "> ";
 /// The placeholder shown on the query-input line when the query is empty (AC-2).
@@ -2171,6 +2180,8 @@ struct FinderLayout {
     /// when the match rows overflow the visible height. The SAME rect `draw_finder_overlay` renders
     /// the scrollbar into and `geometry` feeds back, so a press/drag on it hit-tests where it's drawn.
     vbar: Option<Rect>,
+    /// Scope-toggle button drawn into the top-right border.
+    scope_button: Option<Rect>,
 }
 
 /// Compute the finder overlay's layout geometry for the given frame `area` and `finder` draw
@@ -2198,6 +2209,23 @@ fn finder_overlay_layout(
     let width = area.width.saturating_sub(2).min(SEARCH_OVERLAY_MAX_W);
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let popup = Rect::new(x, area.y, width, want_h.min(area.height));
+    let button_label = if finder.workspace {
+        "[Selection]"
+    } else {
+        "[Workspace]"
+    };
+    let button_width = button_label.len().min(u16::MAX as usize) as u16;
+    let scope_button = (popup.width >= button_width.saturating_add(12)).then(|| {
+        Rect::new(
+            popup
+                .x
+                .saturating_add(popup.width)
+                .saturating_sub(1 + button_width),
+            popup.y,
+            button_width,
+            1,
+        )
+    });
 
     let block = modal_frame();
     let inner = block.inner(popup);
@@ -2256,6 +2284,7 @@ fn finder_overlay_layout(
         offset,
         max_hscroll,
         vbar,
+        scope_button,
     }
 }
 
@@ -2302,10 +2331,13 @@ fn draw_finder_overlay(
         .map(|(i, path)| finder_match_line(path, i == finder.cursor, icons))
         .collect();
 
-    // Chrome: static strings, no sanitization needed. Only FINDER_TITLE on the top border —
-    // the `esc cancel` chip has been removed so it does not duplicate the footer hint.
+    // The scope label comes from a filesystem path, so neutralize controls before placing it on
+    // the top border.
     let hint_style = Style::new().fg(Color::Reset);
-    let top_left = Line::from(FINDER_TITLE);
+    let top_left = Line::from(format!(
+        "{FINDER_TITLE}: {}",
+        sanitize_control(&finder.scope_label)
+    ));
     let footer = Line::styled(FINDER_FOOTER_HINT, hint_style).centered();
 
     // Clear whatever the columns drew beneath the popup so it reads as a true modal.
@@ -2316,6 +2348,17 @@ fn draw_finder_overlay(
         .title_bottom(footer)
         .border_style(modal_border_style());
     frame.render_widget(block, layout.popup);
+    if let Some(button) = layout.scope_button {
+        frame.render_widget(
+            Paragraph::new(if finder.workspace {
+                "[Selection]"
+            } else {
+                "[Workspace]"
+            })
+            .style(Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            button,
+        );
+    }
 
     // Render the query line if the interior is tall enough.
     if layout.query_area.height > 0 {

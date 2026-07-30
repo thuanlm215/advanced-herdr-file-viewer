@@ -7,6 +7,7 @@
 
 use crate::fuzzy;
 use crate::prompt::PromptInput;
+use std::path::Path;
 
 /// How many columns one horizontal-scroll step moves the result rows. Mirrors the controller's
 /// `HSCROLL_STEP` — defined here so `FinderState` is self-contained and the controller can call
@@ -20,9 +21,16 @@ const HSCROLL_STEP: u16 = 8;
 pub struct FinderState {
     /// The current query the user has typed.
     prompt: PromptInput,
-    /// Every file under the root, as root-relative strings (from [`crate::index::build`]).
-    /// Populated once at open time; not refreshed mid-session (YAGNI).
+    /// The candidate list for the active scope, as root-relative strings.
     candidates: Vec<String>,
+    /// Every file under the tree root. Scope toggling restores this list without re-walking disk.
+    workspace_candidates: Vec<String>,
+    /// Files under the selected directory (or the selected file's parent directory).
+    selection_candidates: Vec<String>,
+    /// Root-relative label shown while selection scope is active.
+    selection_label: String,
+    /// `true` when the active candidate list covers the whole workspace.
+    workspace: bool,
     /// Indices into `candidates` that match the current query, ranked best-first.
     /// Empty when the query is empty (no matches until the user types). Driven by the run loop.
     matches: Vec<usize>,
@@ -35,15 +43,52 @@ pub struct FinderState {
 }
 
 impl FinderState {
-    /// Build a new `FinderState` with an empty prompt over the given candidate list.
-    pub fn new(candidates: Vec<String>) -> Self {
+    /// Build a selection-scoped `FinderState` with an empty prompt.
+    pub fn new(
+        workspace_candidates: Vec<String>,
+        selection_scope: &Path,
+        selection_label: String,
+    ) -> Self {
+        let selection_candidates: Vec<String> = workspace_candidates
+            .iter()
+            .filter(|candidate| Path::new(candidate).starts_with(selection_scope))
+            .cloned()
+            .collect();
         Self {
             prompt: PromptInput::default(),
-            candidates,
+            candidates: selection_candidates.clone(),
+            workspace_candidates,
+            selection_candidates,
+            selection_label,
+            workspace: false,
             matches: Vec::new(),
             cursor: 0,
             hscroll: 0,
         }
+    }
+
+    pub fn scope_label(&self) -> &str {
+        if self.workspace {
+            "workspace"
+        } else {
+            &self.selection_label
+        }
+    }
+
+    pub fn workspace(&self) -> bool {
+        self.workspace
+    }
+
+    /// Switch between the selected folder and the whole workspace, retaining the query and
+    /// immediately re-ranking it against the newly active candidate list.
+    pub fn toggle_scope(&mut self) {
+        self.workspace = !self.workspace;
+        self.candidates = if self.workspace {
+            self.workspace_candidates.clone()
+        } else {
+            self.selection_candidates.clone()
+        };
+        self.recompute();
     }
 
     /// The current query string. Exposed for the controller test accessor.

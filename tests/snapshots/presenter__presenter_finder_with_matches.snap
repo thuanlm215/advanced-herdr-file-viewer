@@ -2,14 +2,14 @@
 source: tests/presenter.rs
 expression: "render(&finder_state_with_matches(), 100, 24)"
 ---
-"┌┌Go to file──────────────────────────────────────────────────────────────────────────────────────┐┐"
+"┌┌Go to file: src/─────────────────────────────────────────────────────────────────────[Workspace]┐┐"
 "││                                                                                                ││"
 "││ > main                                                                                         ││"
 "││ main.rs  src                                                                                   ││"
 "││ main_helper.rs  src/inner                                                                      ││"
 "││ README.md                                                                                      ││"
 "││                                                                                                ││"
-"│└───────────────────────────↑↓ move · ←→ scroll · ⏎ open · esc cancel────────────────────────────┘│"
+"│└────────────────────Tab scope · ↑↓ move · ←→ scroll · Enter open · Esc close────────────────────┘│"
 "│                                      ││                                                          │"
 "│                                      ││                                                          │"
 "│                                      ││                                                          │"

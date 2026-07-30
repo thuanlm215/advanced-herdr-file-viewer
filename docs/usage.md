@@ -38,9 +38,10 @@ or drag the divider; the starting split, the tree's side, and a column cap are a
 
 ## Finding a file fast
 
-Press `f` to open a **fuzzy finder** over every file in the tree (`.gitignore`-aware). Type to
-filter, `↑`/`↓` to move, `Enter` to open, `Esc` to cancel — far faster than scrolling the tree in a
-large repo. Like full-text search, its fixed-width box is pinned to the top of the pane and only
+Press `f` to open a **fuzzy finder** in the selected folder (`.gitignore`-aware). When a file is
+selected, the scope is its parent folder. `Tab` or the `[Workspace]` / `[Selection]` button switches
+between that folder and the whole workspace, matching full-text search. Type to filter, `↑`/`↓` to
+move, `Enter` to open, and `Esc` to cancel. The fixed-width box is pinned to the pane top and only
 grows downward as results appear; once it reaches the pane height, results scroll inside it. Each
 result puts the file name first and its parent folder after it, matching VS Code's compact layout;
 files at the tree root omit the empty folder label.

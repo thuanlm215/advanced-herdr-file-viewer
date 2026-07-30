@@ -14,6 +14,8 @@ impl Controller {
         let f = self.modal.finder()?;
         Some(FinderView {
             query: f.query().to_string(),
+            scope_label: f.scope_label().to_string(),
+            workspace: f.workspace(),
             matches: f
                 .matches()
                 .iter()
@@ -140,12 +142,21 @@ impl Controller {
     /// modal no-op (the finder stays open — Esc cancels, not an outside click).
     fn handle_finder_click(&mut self, col: u16, row: u16) -> Effects {
         use ratatui::layout::Position;
+        let pos = Position { x: col, y: row };
+        if self
+            .geom
+            .finder_scope_button
+            .is_some_and(|rect| rect.contains(pos))
+        {
+            self.last_click = None;
+            return self.toggle_finder_scope();
+        }
         let Some(rows_rect) = self.geom.finder_rows else {
             // No rows area (empty query or zero matches) — click is inert but modal.
             self.last_click = None;
             return Effects::noop();
         };
-        if !rows_rect.contains(Position { x: col, y: row }) {
+        if !rows_rect.contains(pos) {
             // Click outside the rows area (on the border, query line, etc.) — inert, modal.
             self.last_click = None;
             return Effects::noop();
@@ -174,16 +185,41 @@ impl Controller {
         Effects::redraw()
     }
 
-    /// Open the go-to-file finder (AC-1). Builds the file index for the current root, then
-    /// installs a fresh `FinderState` with an empty query and the full candidate list.
+    /// Open the go-to-file finder in the selected directory, or a selected file's parent. Builds
+    /// one fresh workspace index so scope toggling is instant and reflects filesystem changes.
     /// Returns [`Effects::redraw`] so the run loop paints the overlay on the next tick.
     ///
     /// Modal mutual-exclusion (finder inert while the picker is open) holds BY CONSTRUCTION:
     /// `handle()` routes to `handle_picker_intent()` while `self.modal.picker().is_some()`, and its
     /// catch-all `_ => Effects::noop()` swallows `OpenFinder`. No extra guard is needed here.
     pub(super) fn open_finder(&mut self) -> Effects {
+        let Some(node) = self.tree.selected() else {
+            return Effects::noop();
+        };
+        let selection_scope = if node.kind == NodeKind::Dir {
+            node.path
+        } else {
+            node.path.parent().unwrap_or(&self.root).to_path_buf()
+        };
+        let selection_relative = selection_scope
+            .strip_prefix(&self.root)
+            .unwrap_or(&selection_scope)
+            .to_path_buf();
+        let label = selection_relative
+            .components()
+            .filter_map(|component| match component {
+                std::path::Component::Normal(part) => Some(part.to_string_lossy()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        let label = if label.is_empty() {
+            "./".to_string()
+        } else {
+            format!("{label}/")
+        };
         let candidates = crate::index::build(&self.root);
-        self.modal = Modal::Finder(FinderState::new(candidates));
+        self.modal = Modal::Finder(FinderState::new(candidates, &selection_relative, label));
         self.last_click = None; // opening the finder resets double-click state so a prior tree
         // click cannot pair with the first finder click as a double-click
         Effects::redraw()
@@ -223,6 +259,10 @@ impl Controller {
                 finder.move_selection(1);
                 Effects::redraw()
             }
+            KeyCode::Tab => {
+                finder.toggle_scope();
+                Effects::redraw()
+            }
             // Left/Right: horizontal scroll of the result rows. The prompt is append-only so the
             // arrow keys are free — exactly as the picker uses ←/→ for hscroll. The Presenter
             // clamps to `max_row_width − inner_width` at draw, so over-scrolling is harmless here.
@@ -252,6 +292,14 @@ impl Controller {
         // match list. Mirrors the open/Esc/confirm `last_click` clears for the keystroke/nav vector.
         self.last_click = None;
         effects
+    }
+
+    fn toggle_finder_scope(&mut self) -> Effects {
+        let Some(finder) = self.modal.finder_mut() else {
+            return Effects::noop();
+        };
+        finder.toggle_scope();
+        Effects::redraw()
     }
 
     /// Confirm the current finder selection: take the selected candidate's root-relative path,

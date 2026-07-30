@@ -178,7 +178,7 @@ customized).
 | | `show_context_menu` | `Space` | Open the context menu for the selected tree node |
 | **Annotations** | `add_annotation` | `a` | Add an in-memory annotation for the selected file |
 | | `show_annotations` | `A` | Open the session annotation overview |
-| **Search & jump** | `open_finder` | `f` | Open the go-to-file fuzzy finder |
+| **Search & jump** | `open_finder` | `f` | Open the folder/workspace go-to-file fuzzy finder |
 | | `open_text_search` | `F` | Search text in the selected file/folder with ripgrep; the modal can switch to workspace scope |
 | | `open_go_to_line` | `:` | Open the go-to-line prompt |
 | | `open_search` | `/` | Open the in-file search prompt |
