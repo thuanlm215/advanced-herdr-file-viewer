@@ -16,7 +16,7 @@ use herdr_file_viewer::git::{Baseline, Status};
 use herdr_file_viewer::herdr::HerdrCli;
 use herdr_file_viewer::intent::Intent;
 use herdr_file_viewer::opener::{Opener, OpenerOutcome};
-use herdr_file_viewer::presenter::{Focus, PaneGeometry};
+use herdr_file_viewer::presenter::{Focus, PaneGeometry, geometry};
 use herdr_file_viewer::render::Renderers;
 use herdr_file_viewer::view_policy::ViewMode;
 use herdr_file_viewer::workspace_search::{
@@ -1799,6 +1799,7 @@ fn wide_geometry() -> PaneGeometry {
         finder_scroll: 0,
         finder_max_hscroll: 0,
         finder_vbar: None,
+        finder_scope_button: None,
         workspace_search_rows: None,
         workspace_search_scroll: 0,
         workspace_search_scope_button: None,
@@ -5233,6 +5234,8 @@ fn finder_dir() -> (TempDir, Controller) {
     std::fs::write(dir.path().join("sub").join("gamma.rs"), "c").unwrap();
     let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
     ctrl.handle(Intent::OpenFinder);
+    // Most legacy finder tests exercise the original all-workspace candidate set.
+    ctrl.handle_finder_key(key(KeyCode::Tab));
     (dir, ctrl)
 }
 
@@ -5571,6 +5574,77 @@ fn open_finder_opens_finder_with_full_candidate_list_and_empty_query() {
     );
 }
 
+#[test]
+fn finder_defaults_to_selected_files_parent_and_tab_toggles_workspace() {
+    let dir = TempDir::new();
+    std::fs::write(dir.path().join("alpha.txt"), "a").unwrap();
+    std::fs::create_dir(dir.path().join("sub")).unwrap();
+    std::fs::write(dir.path().join("sub").join("gamma.rs"), "c").unwrap();
+    let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
+    let folder = dir.path().join("sub");
+    let target = dir.path().join("sub").join("gamma.rs");
+    for _ in 0..8 {
+        if ctrl
+            .tree()
+            .selected()
+            .is_some_and(|node| node.path == folder)
+        {
+            break;
+        }
+        ctrl.handle(Intent::NavDown);
+    }
+    assert_eq!(ctrl.tree().selected().unwrap().path, folder);
+    ctrl.handle(Intent::OpenFinder);
+    assert_eq!(ctrl.finder_candidates(), &["sub/gamma.rs".to_string()]);
+    assert_eq!(ctrl.view_state().finder.unwrap().scope_label, "sub/");
+    ctrl.handle_finder_key(key(KeyCode::Esc));
+
+    ctrl.handle(Intent::Expand);
+    ctrl.handle(Intent::NavDown);
+    assert_eq!(ctrl.tree().selected().unwrap().path, target);
+
+    ctrl.handle(Intent::OpenFinder);
+    let finder = ctrl.view_state().finder.unwrap();
+    assert!(!finder.workspace);
+    assert_eq!(finder.scope_label, "sub/");
+    assert_eq!(ctrl.finder_candidates(), &["sub/gamma.rs".to_string()]);
+
+    ctrl.handle_finder_key(key(KeyCode::Char('a')));
+    ctrl.handle_finder_key(key(KeyCode::Tab));
+    let finder = ctrl.view_state().finder.unwrap();
+    assert!(finder.workspace);
+    assert_eq!(finder.scope_label, "workspace");
+    assert_eq!(finder.query, "a", "scope switching retains the query");
+    assert!(
+        ctrl.finder_candidates().contains(&"alpha.txt".to_string()),
+        "workspace scope restores root-level files"
+    );
+
+    ctrl.handle_finder_key(key(KeyCode::Tab));
+    assert_eq!(ctrl.finder_candidates(), &["sub/gamma.rs".to_string()]);
+    assert_eq!(ctrl.view_state().finder.unwrap().scope_label, "sub/");
+}
+
+#[test]
+fn clicking_finder_scope_button_toggles_like_tab() {
+    let (_dir, mut ctrl) = finder_dir();
+    // `finder_dir` puts legacy tests in workspace scope; start this scope-control
+    // test from the new selection-scoped default.
+    ctrl.handle_finder_key(key(KeyCode::Tab));
+    let state = ctrl.view_state();
+    let mut geom = geometry(Rect::new(0, 0, 100, 24), &state);
+    let button = geom
+        .finder_scope_button
+        .expect("finder scope button is visible");
+    let (x, y) = (button.x, button.y);
+    ctrl.set_pane_geometry(std::mem::take(&mut geom));
+
+    ctrl.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), x, y));
+    let finder = ctrl.view_state().finder.unwrap();
+    assert!(finder.workspace);
+    assert_eq!(finder.scope_label, "workspace");
+}
+
 // ---------------------------------------------------------------------------
 // Confirm (reveal + render) · cancel · no-match no-op
 // ---------------------------------------------------------------------------
@@ -5592,6 +5666,7 @@ fn finder_dir_git() -> (TempDir, Controller) {
     };
     let (mut ctrl, _, _) = controller(dir.path(), true, git, false);
     ctrl.handle(Intent::OpenFinder);
+    ctrl.handle_finder_key(key(KeyCode::Tab));
     (dir, ctrl)
 }
 
@@ -6556,7 +6631,9 @@ fn finder_works_fully_in_a_non_git_directory() {
         "finder is open in a non-git root (AC-19)"
     );
 
-    // 2. Candidate list must be non-empty and equal to index::build(root).
+    // 2. Switch to workspace scope; that candidate list must be non-empty and
+    // equal to index::build(root).
+    ctrl.handle_finder_key(key(KeyCode::Tab));
     let mut got = ctrl.finder_candidates().to_vec();
     got.sort();
     let mut expected = herdr_file_viewer::index::build(dir.path());
@@ -6765,10 +6842,11 @@ fn ac_n4_fresh_controller_rebuilds_candidates_from_disk_with_no_persistent_state
         "AC-N4: no new file must appear under root from using the finder"
     );
 
-    // Second, fresh controller: candidates must match index::build(root).
+    // Second, fresh controller: workspace candidates must match index::build(root).
     let (mut ctrl2, _, _) = controller(dir.path(), false, StubGit::default(), false);
     ctrl2.handle(Intent::OpenFinder);
     assert!(ctrl2.finder_open(), "fresh controller opened the finder");
+    ctrl2.handle_finder_key(key(KeyCode::Tab));
 
     let mut got = ctrl2.finder_candidates().to_vec();
     got.sort();

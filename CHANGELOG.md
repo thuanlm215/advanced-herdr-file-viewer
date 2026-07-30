@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are short on purpose; follow the
 `→` links for the full detail.
 
+## [1.19.0] - 2026-07-31
+
+### Changed
+- The `f` file finder now defaults to the selected folder (or selected file's parent) and toggles workspace scope with `Tab` or the same `[Workspace]` / `[Selection]` button used by full-text search. → [usage](docs/usage.md#finding-a-file-fast) · [keys](docs/keys.md)
+
 ## [1.18.0] - 2026-07-30
 
 ### Added

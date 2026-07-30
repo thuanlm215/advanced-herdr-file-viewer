@@ -2,11 +2,11 @@
 source: tests/presenter.rs
 expression: "render(&finder_state_empty_query(), 100, 24)"
 ---
-"┌┌Go to file──────────────────────────────────────────────────────────────────────────────────────┐┐"
+"┌┌Go to file: src/─────────────────────────────────────────────────────────────────────[Workspace]┐┐"
 "││                                                                                                ││"
 "││ > type to find a file…                                                                         ││"
 "││                                                                                                ││"
-"│└───────────────────────────↑↓ move · ←→ scroll · ⏎ open · esc cancel────────────────────────────┘│"
+"│└────────────────────Tab scope · ↑↓ move · ←→ scroll · Enter open · Esc close────────────────────┘│"
 "│  README.md                           ││}                                                         │"
 "│D gone.txt                            ││                                                          │"
 "│? scratch.log                         ││                                                          │"

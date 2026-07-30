@@ -2489,6 +2489,8 @@ fn finder_state_empty_query() -> ViewState {
     let mut state = sample_state();
     state.finder = Some(FinderView {
         query: String::new(),
+        scope_label: "src/".to_string(),
+        workspace: false,
         matches: vec![],
         cursor: 0,
         hscroll: 0,
@@ -2501,6 +2503,8 @@ fn finder_state_with_matches() -> ViewState {
     let mut state = sample_state();
     state.finder = Some(FinderView {
         query: "main".to_string(),
+        scope_label: "src/".to_string(),
+        workspace: false,
         matches: vec![
             "src/main.rs".to_string(),
             "src/inner/main_helper.rs".to_string(),
@@ -2633,6 +2637,23 @@ fn finder_is_top_anchored_fixed_width_and_only_grows_downward() {
         match_rows.height > one.height,
         "adding results only extends the bottom edge downward"
     );
+}
+
+#[test]
+fn finder_scope_button_and_title_match_full_text_search_vocabulary() {
+    let area = Rect::new(0, 0, 100, 24);
+    let mut state = finder_state_with_matches();
+    let selection = render(&state, 100, 24);
+    assert!(selection.contains("Go to file: src/"), "{selection}");
+    assert!(selection.contains("[Workspace]"), "{selection}");
+    assert!(geometry(area, &state).finder_scope_button.is_some());
+
+    let finder = state.finder.as_mut().unwrap();
+    finder.workspace = true;
+    finder.scope_label = "workspace".to_string();
+    let workspace = render(&state, 100, 24);
+    assert!(workspace.contains("Go to file: workspace"), "{workspace}");
+    assert!(workspace.contains("[Selection]"), "{workspace}");
 }
 
 #[test]
@@ -2793,6 +2814,8 @@ fn finder_state_overflow() -> ViewState {
     let matches: Vec<String> = (0..30).map(|i| format!("src/file_{i:02}.rs")).collect();
     state.finder = Some(FinderView {
         query: "file".to_string(),
+        scope_label: "src/".to_string(),
+        workspace: false,
         matches,
         cursor: 25,
         hscroll: 0,
@@ -2910,6 +2933,8 @@ fn finder_overlay_nonempty_query_zero_matches_shows_prompt_not_placeholder() {
     let mut state = sample_state();
     state.finder = Some(FinderView {
         query: "zzzzz".to_string(),
+        scope_label: "src/".to_string(),
+        workspace: false,
         matches: vec![],
         cursor: 0,
         hscroll: 0,
