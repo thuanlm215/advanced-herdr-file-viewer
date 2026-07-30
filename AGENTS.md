@@ -1,0 +1,211 @@
+# AGENTS.md
+
+## Routing guideline
+
+Stranger litmus test: would this instruction make sense to a stranger who cloned this repo? If
+no, it belongs in AGENTS.local.md.
+
+A gitignored AGENTS.local.md may exist beside this file; if present, read and follow it before starting work.
+
+Pointer files carry no content: edits go to AGENTS.md or AGENTS.local.md, never CLAUDE.md: it is a
+frozen one-line pointer and says so in-file.
+
+Lazy creation: if an agent has private-routed content (per the litmus test above) and no
+AGENTS.local.md exists yet in this working copy, it creates one; the committed .gitignore entry
+already covers it, so the pattern self-propagates to every clone.
+
+@AGENTS.local.md
+
+## Project overview
+
+**Cross-agent source of truth for this repo.** Any coding agent (Claude Code, Cursor, Codex,
+Aider, …) should read this first. It is intentionally vendor-neutral: agent-specific entry files
+(e.g. `CLAUDE.md`) import or point at this file rather than duplicating it.
+
+> **Maintainability rule:** standing project rules live HERE, once. Don't copy them into per-agent
+> files. Those should be thin shims that `@import`/reference this.
+
+Companion docs:
+
+- **`CONTEXT.md`**: the glossary (canonical vocabulary).
+- **`constitution.md`**: the standing principles (the source for "Load-bearing constraints").
+- **`ARCHITECTURE.md`**: the committed module map (keep it current when components change).
+- **`docs/`** (index: `docs/README.md`): the user-facing docs — `keys.md` (the full key/mouse
+  reference), `configuration.md` (the `config.toml` + `[keys]` reference), `usage.md` (per-feature
+  guide), plus `install.md` / `summoning.md` / `renderers.md` / `windows.md`. The root `README.md` is
+  a lean front door that links into these; reference detail lives in `docs/`, never the README.
+
+### What this is
+
+A **herdr plugin**: a git-aware, read-only **file viewer**: a keyboard-driven TUI that opens in a
+herdr split pane, with a directory tree on the left and a content pane on the right (rendered
+markdown, diffs, or syntax-highlighted content). herdr is the host (a Rust+ratatui terminal agent
+multiplexer); this plugin is built to align with it.
+
+### Current state: BUILT & SHIPPED
+
+The plugin is fully built and shipped publicly to **`thuanlm215/advanced-herdr-file-viewer`**. `Cargo.toml`,
+`src/` (lib + modules + thin binary), `herdr-plugin.toml`, CI, and tagged releases all exist.
+`main` is **protected** (PR + green CI required; force-push/delete blocked).
+
+### Architecture (the big picture)
+
+A **single in-process TUI owns both columns** (ADR-0002). It is not composed of multiple herdr
+panes. Logical components and their one-line responsibilities (full contracts in `ARCHITECTURE.md`
+and the spec chain):
+
+- **Host Adapter**: the herdr boundary: manifest declaration + parsing injected context + open-pane requests
+- **Root Resolver**: resolve the tree root (worktree root vs cwd) and git-presence
+- **Tree Model**: the rooted, gitignore-aware file tree + filters + cursor
+- **Git Service**: read-only git queries (status, baseline, changed-set, diff)
+- **View Policy**: pure decision: which view mode for a file (changed→diff, md→rendered, else→content)
+- **Content Renderer**: produce content-pane text by delegating to external CLIs, with guards
+- **Presenter**: draw the two-column layout (ratatui)
+- **Input Dispatcher**: map key events → intents (crossterm)
+- **Session Controller**: orchestrate intents → state changes; holds in-memory session state
+- **Editor Launcher**: hand a file off to an external editor / new herdr pane
+
+State is **in-memory and ephemeral only**: no persistent store in v1; the filesystem and git repo
+are the read-only source of truth. (`ARCHITECTURE.md` is the committed module map; keep it current.)
+
+### Load-bearing constraints (from `constitution.md`)
+
+These shape every decision; violating one is a design error, not a style nit:
+
+- **Read-only.** No file or git mutations. The editor path is hand-off only. (AC-N1, AC-N2)
+- **Delegate rendering.** Reuse external CLIs (`glow` markdown, `delta` diff, `bat` syntax); build
+  only the shell. Never reinvent rendering. (ADR-0001)
+- **Git is first-class**, woven through the tree and content pane, not a separate mode.
+- **Keyboard-first.** Every function reachable by keyboard; no mouse required. (AC-18)
+- **Good plugin citizen.** Drive herdr only through its documented CLI/socket; no persistent state
+  beyond the plugin's own dirs.
+- **YAGNI.** Smallest thing that meets the criteria; resist turning a viewer into a file manager or
+  git client.
+
+### Stack specifics
+
+- **Rust 1.96 (edition 2024)** + **ratatui 0.30.1** (uses `ratatui-core` 0.1.x) + **crossterm 0.29.0**
+- **`ansi-to-tui` 8.0.1** ingests the external renderers' ANSI output into ratatui spans, and
+  doubles as the **AC-27 escape-neutralizer** (maps styling, drops cursor/screen-control). All file
+  content flows through it.
+- **`ignore` 0.4.26** for fast, `.gitignore`-aware tree walking (do not hand-roll gitignore).
+- **git via the system CLI** (read-only subcommands only), no `git2`/`gix`.
+- **`serde`/`serde_json`** only for parsing `HERDR_PLUGIN_CONTEXT_JSON`.
+- Tests: `cargo test` + ratatui `TestBackend` + **`insta`** (snapshots) + **`expectrl`** (pty e2e).
+- No `tokio` (off-thread rendering uses `std::thread`+`mpsc`), no `clap`. **Minimal-deps house
+  style**: adding a crate is a deliberate decision, not a default.
+
+### herdr integration (verified surface)
+
+- **Check herdr's live docs/CLI before you scope OR build anything that touches the host boundary.**
+  This section is called *verified surface* for a reason: herdr evolves, so never assume a command,
+  flag, or JSON shape from memory. Confirm it against the installed herdr first: `herdr --help`,
+  `herdr <cmd> --help` (e.g. `herdr pane --help`), a read-only probe of the real output (`herdr pane
+  current`, `herdr pane layout --current`), and the `herdr` skill when running inside herdr
+  (`HERDR_ENV=1`). Pin the exact argv you verified in a test comment so a future change can't
+  silently break it.
+- **Manifest** `herdr-plugin.toml`: declare the viewer as a `[[panes]]` entry with
+  `placement = "split"` and `command = ["./target/release/advanced-herdr-file-viewer"]`, plus an
+  `[[actions]]` to summon it; `min_herdr_version = "0.7.0"`, `platforms = ["linux","macos","windows"]`
+  (Windows is preview, with per-item launcher entries), and **platform-gated `[[build]]` steps**
+  (`["/bin/sh","scripts/fetch-or-build.sh"]` on unix, `powershell … scripts/fetch-or-build.ps1` on
+  Windows) that download the verified prebuilt binary and fall back to `cargo build --release`.
+  **No `[[events]]`** (AC-N4).
+- **Runtime host ops** via the herdr CLI (`$HERDR_BIN_PATH`, the `HerdrCli::run` / `run_json` seam in
+  `src/herdr.rs`): read-only layout/query commands only — e.g. `pane zoom` (the `Z` full-screen), the
+  worktree picker's queries, and the tab/split launcher scripts. The **editor hand-off is NOT a herdr
+  pane**: `e` runs the editor *in-process* (the viewer suspends and resumes around `$EDITOR` / the
+  config `editor`), so the viewer never spawns a pane for it.
+- External renderers (glow/delta/bat) are **runtime, install-time** dependencies, not Cargo deps;
+  the Content Renderer falls back to plain text + a notice when one is absent (AC-24/25).
+- Make external commands (renderers, editor, herdr CLI) **injected parameters** so tests stay
+  hermetic, never depend on glow/delta/bat or a live herdr in unit/integration tests.
+
+## Build / test / verify
+
+The crate is a **library (`src/lib.rs` + modules) + thin binary (`src/main.rs` → `run()`)** so
+components are unit-testable; integration/e2e tests live in `tests/`.
+
+```bash
+cargo test                      # all unit + integration + e2e tests
+cargo test <name>               # a single test by name substring
+cargo test --test <file>        # one integration test file (e.g. --test tree_filters)
+cargo build --release           # what herdr's [[build]] step runs at install time
+cargo run                       # run the viewer locally (outside herdr)
+
+# deterministic health tier (keep green):
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo audit
+```
+
+## Conventions
+
+### Working in this repo
+
+- **The spec is the contract.** To change scope/criteria/design/stack, edit the artifact at the
+  **owning stage** and **re-run the readiness check**, don't ad-hoc-edit downstream specs.
+- **Definition of done for a user-facing feature:** the feature isn't done until the docs match it,
+  IN the same PR: `CHANGELOG.md` entry, the relevant `docs/` page (`docs/keys.md` for a key + the
+  Shift-keys note for a capital-letter key, `docs/usage.md` for the feature, `docs/configuration.md`
+  for a config key), and `ARCHITECTURE.md`'s module table if components changed. The root `README.md`
+  is a lean front door (a taste of keys + links to `docs/`), NOT the full reference: keep detail in
+  `docs/`, not the README.
+- **Verify the branch base before a PR.** Worktrees here are often branched off a feature commit,
+  not `main`; always `git log main..HEAD` before committing/opening a PR, or strays get swept in.
+- Keep the deterministic tier green (fmt/clippy/`cargo audit`) and tests hermetic.
+
+### Adding a keybinding or a config key (touchpoints + drift guards)
+
+Both surfaces are single-source-of-truth in code, with a build-failing test guarding the docs, so you
+never wire them in two places or let the docs drift.
+
+**A new keybinding / action.** `REGISTRY` in `src/input.rs` is the source of truth: the dispatcher,
+the `?` overlay's Keybindings section, and `[keys]` remapping all derive from it.
+1. Add the variant to the `Intent` enum in `src/intent.rs` (it lives in `Intent::ALL`, 33 today).
+2. Add a `Binding { intent, name, default_keys, description, category }` row to `REGISTRY`
+   (`category` must be one of `CATEGORY_ORDER`).
+3. Handle the intent in the session controller (`src/controller/`).
+4. **Docs (same PR):** add the key row to the `## Keys` table in **`docs/keys.md`** and the
+   intent-name row to the "Every remappable action" table in **`docs/configuration.md`**, plus a
+   `CHANGELOG.md` entry. The `?` overlay updates itself — no manual edit. Two `src/input.rs` tests
+   fail the build if you skip a doc: `keys_doc_table_documents_every_registry_action_ac21` (every
+   registry key is in `docs/keys.md`) and `configuration_doc_lists_every_remappable_intent` (every
+   registry name is in `docs/configuration.md`).
+
+**A new config key.** `src/config.rs` owns it: add the field to `Config`, resolve it in `resolve`
+into `EffectiveSettings`, and apply it at wiring time. **Docs (same PR):** document it in
+**`docs/configuration.md`**, add a commented `key = ...` line to **`config.example.toml`**, surface
+the effective value in the `?` Settings section, and add a `CHANGELOG.md` entry. The
+`config_example_documents_every_config_key` test (`tests/docs_consistency.rs`) requires a commented
+assignment for every scalar `Config` field — keep its key list in lockstep with `Config`.
+
+### Releasing a version (owner-gated, confirm first)
+
+1. **Bump the version in ALL THREE files**: `Cargo.toml`, `Cargo.lock`, **and `herdr-plugin.toml`**:
+   herdr DISPLAYS the *manifest* version, so a missed `herdr-plugin.toml` ships a wrong version
+   string. `release.yml` fails the build unless the tag matches **both** `Cargo.toml` and
+   `herdr-plugin.toml`. Versioning: **minor per additive feature**, major only on a breaking change
+   or a flagship feature.
+2. Add the `## [X.Y.Z] - DATE` `CHANGELOG.md` entry (Keep-a-Changelog `Added`/`Changed`/`Fixed`,
+   omit empty sections; keep bullets terse and credit external contributors `Thanks @user (#NN)`).
+   **The CHANGELOG section IS the release notes** (single source of truth) — never author them
+   separately, or the two drift. Show the owner the section before posting.
+3. Protected `main` → bump via a **`release/vX.Y.Z` PR** → green CI → merge.
+4. **Tag `vX.Y.Z` AT the merge commit** (`git tag -a vX.Y.Z <merge-sha>` → push) so a bare
+   `herdr plugin install`'s tagless-clone `HEAD` matches the published `COMMIT` asset. The tag push
+   triggers `release.yml` (builds **4 binaries** — Linux musl, macOS arm64 + x86_64, Windows `.exe` —
+   plus `SHA256SUMS` + `COMMIT`, `--generate-notes`).
+5. **Set the release body FROM the CHANGELOG section** (single source of truth, so the notes can't
+   drift from the changelog): extract this tag's `## [X.Y.Z]` block, drop the trailing `→ [docs]`
+   pointers (a release note is a self-contained, pinned artifact), append a
+   `**Full changelog:** <repo>/compare/vPREV...vX.Y.Z` line, then
+   `gh release edit vX.Y.Z --notes-file <f>`. Extract with e.g.
+   `awk '/^## \[X.Y.Z\]/{f=1;next} f&&/^## \[/{exit} f' CHANGELOG.md`.
+6. **Verify**: `gh release view vX.Y.Z` shows **6 assets** (4 binaries + `SHA256SUMS` + `COMMIT`),
+   not draft/prerelease.
+
+**Install gate (current, since PR #50):** the prebuilt binary is used by **declared version match**,
+not commit-exact; main being ahead of the tag no longer forces a source build. So features can
+batch into one release. Caveat: a change to how a launcher script/manifest **invokes** the binary
+must bump the version in that same commit.

@@ -1,0 +1,20 @@
+---
+source: tests/presenter.rs
+expression: out
+---
+"┌r──────────────────────────[-]─[p]─[x]┐┌main.rs───────────────────────────────────────────────────┐"
+"│  ▾ src                               ││Showing first 5000 lines (truncated)                      │"
+"│M   main.rs                           ││delta not found — showing plain diff                      │"
+"│    ▾ inner                           ││fn main() {                                               │"
+"│A     added.rs                        ││    println!("hello");                                    │"
+"│  README.md┌Discard annotations?──────────────────────────────────────────────────────┐           │"
+"│D gone.txt │                                                                          │           │"
+"│? scratch.l│ 1 annotation will be lost:                                               │           │"
+"│           │   README.md — Only one.                                                  │           │"
+"│           │                                                                          │           │"
+"│           └─────────────────y copy & switch · ⏎ switch · esc cancel──────────────────┘           │"
+"│                                      ││                                                          │"
+"│                                      ││                                                          │"
+"│                                      ││                                                          │"
+"│                                      ││                                                          │"
+"└──────────────────────────────────────┘└────────────────────────────────────────────────────? help┘"
