@@ -1,0 +1,40 @@
+[package]
+name = "advanced-herdr-file-viewer"
+version = "1.16.0"
+edition = "2024"
+rust-version = "1.96"
+description = "A git-aware, read-only file viewer that runs as a herdr TUI pane"
+license = "MIT"
+authors = ["thuanlm215"]
+repository = "https://github.com/thuanlm215/advanced-herdr-file-viewer"
+homepage = "https://github.com/thuanlm215/advanced-herdr-file-viewer"
+readme = "README.md"
+keywords = ["herdr", "tui", "git", "viewer", "ratatui"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "herdr_file_viewer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "advanced-herdr-file-viewer"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.30.1"
+crossterm = "0.29.0"
+ansi-to-tui = "8.0.1"
+ignore = "0.4.26"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
+
+[features]
+# Enables the absolute-stopwatch perf-budget tests (render_perf, tree_perf, the
+# reroot AC-17 budget). Off the default PR lane — run via `cargo test --features perf`.
+# The relative-scaling perf tests (search_perf, index_perf) run on the default lane.
+perf = []
+
+[dev-dependencies]
+insta = "1.48.0"
+expectrl = "0.9.0"

@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  lint:
+    name: rustfmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.rust }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: ["1.96.0", "stable"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      # The unit / integration / e2e (pty) tests are hermetic: they stub the editor via
+      # $EDITOR and run in temp dirs, so they need neither glow/delta/bat nor a live herdr.
+      - name: test
+        run: cargo test
+
+  audit:
+    name: cargo-audit (advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+
+  # Windows support is preview (AC-19, AC-N2): this job is advisory/non-blocking
+  # (continue-on-error) and deliberately separate from the required `test` matrix above, so a
+  # Windows-only flake can never block an unrelated Linux/macOS PR. Re-evaluate (fold into the
+  # required matrix) once Windows graduates out of preview.
+  windows:
+    name: test (windows-latest, advisory)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+      - uses: Swatinem/rust-cache@v2
+      # A release build exercises AC-1 (the crate links for the MSVC target) on every PR, not only
+      # at tag time — so a release-only/target-specific break shows here, not first on a release.
+      - name: build (release)
+        run: cargo build --release
+      - name: test
+        run: cargo test

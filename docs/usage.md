@@ -1,0 +1,372 @@
+# Usage guide
+
+A tour of what the viewer does, feature by feature. For the exact keys and mouse gestures see the
+[keys reference](keys.md); to open the viewer in the first place see [summoning](summoning.md); to
+customize it see [configuration](configuration.md).
+
+- [The tree](#the-tree)
+- [Finding a file fast](#finding-a-file-fast)
+- [Searching across files](#searching-across-files)
+- [Open at a known file](#open-at-a-known-file) (incl. [Teach your agent](#teach-your-agent))
+- [Viewing a file](#viewing-a-file)
+- [Git awareness](#git-awareness)
+- [Navigating within a file](#navigating-within-a-file)
+- [Annotating files and ranges](#annotating-files-and-ranges)
+- [Copying paths and lines](#copying-paths-and-lines)
+- [Handing a file off](#handing-a-file-off)
+- [Switching worktree](#switching-worktree)
+- [In-app help](#in-app-help)
+- [Staying up to date](#staying-up-to-date)
+- [Using the mouse](#using-the-mouse)
+
+## The tree
+
+The left column is a recursive, expandable directory tree, **rooted at the worktree root** when you
+launch inside a git repo, otherwise at the launch directory. It honors `.gitignore` (press `i` to
+reveal ignored files), and a separate toggle (`.`) hides dot-prefixed "hidden" files and folders
+when a directory is full of them. The tree's **top border names the root** directory and its
+**bottom border shows the current branch**, so you always know *where* and *on what branch* you're
+looking.
+
+Move the cursor with `↑`/`↓` (or `k`/`j`), expand/collapse a directory with `→`/`←` (or `l`/`h`) or
+`Enter`. Keyboard navigation keeps the selection in view. The mouse wheel and vertical scrollbar
+move the whole tree viewport without changing the selected file; `scroll_lines` controls the wheel
+step. Long or deeply-nested names scroll sideways with `H` / `L` when the tree is focused. A
+scrollbar appears whenever there's more than fits. Narrow or widen the tree column with `<` / `>`,
+or drag the divider; the starting split, the tree's side, and a column cap are all
+[configurable](configuration.md).
+
+## Finding a file fast
+
+Press `f` to open a **fuzzy finder** over every file in the tree (`.gitignore`-aware). Type to
+filter, `↑`/`↓` to move, `Enter` to open, `Esc` to cancel — far faster than scrolling the tree in a
+large repo. Like full-text search, its fixed-width box is pinned to the top of the pane and only
+grows downward as results appear; once it reaches the pane height, results scroll inside it. Each
+result puts the file name first and its parent folder after it, matching VS Code's compact layout;
+files at the tree root omit the empty folder label.
+
+## Searching across files
+
+Press `F` to search file contents with **ripgrep**. The initial scope follows the selected tree
+node: a file searches only that file; a directory searches it recursively. Press `Tab` or click
+`[Workspace]` on the search box's top border to re-run the current query against the whole tree
+root; the button becomes `[Selection]` so the original file/folder scope is one action away.
+
+The search box is anchored at the top of the pane with a fixed width. Its top edge never moves:
+results only extend the bottom edge downward until the pane is full, after which the selected result
+scrolls inside the box. Each result uses two lines: the first puts the file name before its parent
+folder and `line:column`, while the second shows the source preview with every matching occurrence
+highlighted. Root-level files omit the empty folder label. The configured
+[`file_icons`](configuration.md) glyph appears beside the file name, matching the tree and file
+finder. `↑`/`↓` moves, `Enter` opens the file in source view at the matching line, and `Esc` closes
+the search.
+
+Search is literal and smart-case, respects `.gitignore`, skips binary files, runs off the input
+thread, and displays at most **500** result rows. When more exist the footer reads
+`500+ matches — results limited`. This feature deliberately requires `rg` on `PATH`; when it is
+missing, `F` leaves the viewer open and shows a non-fatal requirement notice instead of falling
+back to a built-in scanner. Installation commands are in
+[install](install.md#ripgrep-for-full-text-search).
+
+## Open at a known file
+
+When something **already knows** the path (and maybe the line), you can start the viewer on that
+file instead of landing on the tree and navigating by hand. This is for agents, companion plugins,
+and scripts — day-to-day browsing is unchanged (`f`, `:`, the tree).
+
+The launch **open target** is a path under the tree **root** (repo-relative is the usual form;
+absolute paths under the root are also accepted), optionally with a 1-based line — the same shape
+a **line reference** copies with `L` (`src/app.rs` or `src/app.rs:42`). Every successful open shows a
+short status notice (`Opened path`, `Opened path:N`, or `Opened path:A-B`).
+
+A **range** form (`src/app.rs:10-20`) also:
+
+- jumps to the **start** line
+- paints a soft highlight on lines 10–20 for about **1 second**
+
+Path-only and single-line opens do not use that highlight (scroll + notice is enough).
+
+Two ways to pass it (the flag wins if both are set):
+
+| Surface | Example |
+| --- | --- |
+| CLI flag | `advanced-herdr-file-viewer --open src/app.rs:42` |
+| Environment | `HERDR_FILE_VIEWER_OPEN=src/app.rs:42` |
+
+### Companion or agent (usual case)
+
+Ask an agent (or a small companion plugin) to open a place in the **file viewer** instead of
+pasting a path into chat. Once the agent knows how (see [Teach your agent](#teach-your-agent)
+below), natural requests work when it can resolve a real path:
+
+- “Open the file that’s breaking in the file viewer.” (needs an error/log in context)
+- “Show me line 210 of `src/app.rs` in the file viewer.”
+- “Open `handle_finder_click` in the file viewer.”
+- “Show me the `render` function in the file viewer.”
+- “Open the failing test at `tests/tree.rs:149`.”
+- “Jump to this range in the viewer: `src/controller/finder.rs:141-150`.”
+
+The agent resolves that to a repo-relative `path` or `path:line` (or range), then launches the
+viewer with `HERDR_FILE_VIEWER_OPEN` (no fuzzy-finder key-scripting). You get a Files pane on that
+file, content loaded, viewport on the line. If the pane is too narrow to show the content column
+(tree-only layout), the viewer **zooms** the file automatically — same as confirming the fuzzy
+finder in a narrow split. Finder result rows use the configured `file_icons` style, matching the
+tree (`unicode`, `nerd`, or `off`).
+
+### Teach your agent
+
+Agents do **not** know this surface by default. Paste a short block into your project’s
+`AGENTS.md` (preferred: every agent reads it) or `CLAUDE.md` / agent skill so “open in the file
+viewer” means something concrete:
+
+````markdown
+## File viewer (advanced-herdr-file-viewer)
+
+When the user asks to open something "in the file viewer" / "in Files":
+1. Resolve to a repo-relative path (and line if known) from errors, grep, chat, or a line reference.
+2. Launch (do not key-script the TUI):
+
+```bash
+herdr plugin pane open \
+  --plugin advanced-herdr-file-viewer \
+  --entrypoint file-viewer \
+  --placement split \
+  --focus \
+  --env HERDR_FILE_VIEWER_OPEN=<path>[:line]
+```
+
+Examples: `src/app.rs`, `src/app.rs:42`, `src/app.rs:10-20`.
+Outside herdr: `advanced-herdr-file-viewer --open <path>[:line]`.
+````
+
+Without that (or an equivalent skill), a vague “open it in the file viewer” is only a wish: the
+agent has no standard way to discover `--open` / `HERDR_FILE_VIEWER_OPEN`.
+
+### Run the binary yourself
+
+Useful for a local `cargo run`, a shell alias, or a Windows-style `pane run`:
+
+```bash
+advanced-herdr-file-viewer --open src/app.rs:42
+# or
+HERDR_FILE_VIEWER_OPEN=src/app.rs:42 advanced-herdr-file-viewer
+# path only (open at the top of the file)
+advanced-herdr-file-viewer --open docs/usage.md
+```
+
+### Round-trip with the viewer
+
+Copy a location with `L` (a `path:line` or `path:start-end` line reference), then later pass that
+string as `--open` or `HERDR_FILE_VIEWER_OPEN` to land on the same place.
+
+### When the path is wrong
+
+A missing file, a non-file, or a path outside the tree root does **not** crash the viewer: it still
+opens, shows a short notice (e.g. `Could not open …`), and leaves the tree selection unchanged.
+
+This is launch-only. It does not retarget a Files pane that is already running; open a fresh pane
+(or close and reopen) when you need a new target.
+
+## Viewing a file
+
+The content pane shows **the right view for each file, automatically**: a changed file shows its
+**diff**, a markdown file **renders**, anything else is **syntax-highlighted** content with line
+numbers. No mode-switching, no commands.
+
+- **Cycle the view** with `v` to override the automatic choice (e.g. see a changed markdown file's
+  raw source instead of its diff).
+- A changed file can also show a **full-file diff**: the whole file with line numbers and the diff
+  shown inline.
+- **Scroll** the content in all four directions once it's focused (`Tab` to it, then the arrows or
+  `h`/`j`/`k`/`l`). Prose (markdown / plain text) wraps; diffs and code keep their original lines so
+  columns stay aligned. Press `w` to toggle wrapping, or for rendered markdown to switch between the
+  fit-to-pane view (wide tables sized to fit, over-long cells shown as `…`) and a wide view that
+  renders tables at full width and scrolls sideways.
+- **Zoom** with `z` to hide the tree and read the file across the full pane; press again (or
+  `q`/`Esc`) to restore the split. You can also **double-click the content pane title** (the
+  filename on the top border) to toggle the same zoom without the key.
+- **Full-screen** with `Z` (Shift+`z`) to open the file *and* zoom the viewer's herdr pane to fill
+  the whole terminal — the file takes over the entire screen, not just the split. `Z` again (or
+  `Esc`/`q`/`z`) returns to the split.
+
+Rendering is **delegated** to `glow` (markdown), `delta` (diffs), and `bat` (syntax); when a
+renderer isn't installed the viewer falls back to plain text with a short notice. See
+[external renderers](renderers.md).
+
+## Git awareness
+
+Git status is woven straight into the tree, not a separate mode:
+
+- **Status markers**: each file carries its git-status letter — `M` modified, `A` added, `D`
+  deleted, `?` untracked — and a directory containing any change carries a `●`. They're **colored**
+  so changes read at a glance (changed files and dirty folders red, new files green), with the glyph
+  as a non-color cue so status survives a colorblind palette or a non-default terminal theme.
+- **Changed-files-only filter**: press `c` to restrict the tree to files changed against the active
+  baseline (`b`) — useful for reviewing a whole branch (merge-base) or just uncommitted work (`HEAD`).
+- **Git-status mode**: press `d` to filter the tree to **current working-tree status only**
+  (modified, staged, untracked, deleted — independent of baseline) and force working-tree diffs in
+  the content pane. On a directory, that means a unified diff of all tracked changes under it.
+  Press `d` again to leave. Mutually exclusive with `c` (turning one on turns the other off).
+- **Diff baseline**: press `b` to flip what "changed" and the normal/file-cycle diffs compare against
+  — the merge-base of your branch versus `HEAD`. While git-status mode (`d`) is on, content stays
+  working-tree; `b` still updates the stored baseline for when you leave `d` or use `c`.
+- **Diff presentation**: in a changed file's Diff or FullDiff view, press `D` to cycle Delta's
+  unified output, Delta side-by-side output, and plain unstyled git diff. Side-by-side is applied
+  only when the configured diff renderer is Delta; custom renderers remain unchanged. The setting
+  is presentation-only and does not change the selected baseline or git data.
+- **Refresh**: the viewer re-reads git status automatically when the pane regains focus, so a merge,
+  pull, or commit you make elsewhere shows up on its own; `r` forces a full refresh on demand.
+
+Git is read through the system `git` CLI (read-only subcommands only). Without git on `PATH` the
+viewer still opens, but the status markers, filter, baseline, and diffs are degraded — see
+[install](install.md).
+
+## Navigating within a file
+
+- **Go to a line**: press `:` and type a line number to jump the content pane straight there. In a
+  rendered-markdown or diff view it switches to the line-numbered content view to make the jump;
+  out-of-range clamps to the last line.
+- **Search in the file**: press `/` to search the open file's content. Every match highlights as you
+  type, `Enter` commits, and `n` / `N` cycle through matches (wrapping at the ends). Smartcase — a
+  lowercase query matches any case; add a capital to go case-sensitive — and it works in every view
+  (code, markdown, or diff). `Esc` clears it and restores your scroll.
+
+## Annotating files and ranges
+
+Annotations are read-only notes for the **current viewer session and root**. They start empty on
+launch, stay in memory only, and never modify files or git state.
+
+Annotated files show `@` in the tree's reserved prefix column (alongside any git marker) and before
+the applied content title. Unselected annotated filenames use a subtle background; line/range
+targets use the same background on extant lines in the source/content view, including a one-cell cue
+for a blank line. Rendered Markdown and diff views keep the file/title `@`, but do not color numeric
+line targets because transformed output has no trustworthy source-line mapping. Active line-select,
+mouse selection, and search highlighting take precedence: cyan replaces the persistent background,
+while the current line-select marker or current search match retains it with reversed bold emphasis.
+Closing the active state reveals the persistent annotation background again.
+
+- **Add to a file**: select a file and press `a`, type the note, then press `Enter` to save or `Esc`
+  to cancel. Directories cannot be annotated.
+- **Add to lines**: focus the content pane, press `L`, select a line/range, then press the
+  line-select-local `a`. The target is captured as a root-relative file plus the normalized
+  inclusive line/range; canceling the editor restores the exact selection.
+- **Edit, delete, or clear**: press `A` for the annotation overview. Move with `↑`/`↓` or `j`/`k`,
+  edit with `Enter`/`e`, delete one with `d`, or press uppercase `D` once to clear all immediately.
+  `Esc`/`q` closes the overview.
+- **Copy all**: press `y` in a non-empty overview. The deterministic, path/range-ordered export goes
+  through OSC 52 and the overview closes; copying does not remove annotations.
+
+Saving normalizes every run of Unicode whitespace or control characters to one ASCII space and
+trims both ends. If that leaves the note empty, the editor stays open and shows a validation error;
+the annotation is not added or changed.
+
+A worktree switch (re-root) also clears all annotations, because their targets belong to the old
+root, so it raises the same confirm quitting does (`y` copies them and switches, `Enter` switches
+and discards, `Esc` cancels the switch and stays put). A failed switch or a same-root no-op changes
+nothing and never confirms, since neither would lose anything. Closing and relaunching the viewer
+always starts with an empty annotation store.
+
+Because annotations live only for the session, anything that would discard them confirms first
+rather than losing them to a stray key: quitting (`q`) and switching worktree (`W`) both raise it.
+The dialog lists what would be lost, in the same rows the overview uses (the first eight, then
+`+N more`, so it stays glanceable on a short terminal):
+
+- **`y` copies them and continues**, which is usually where you were headed anyway: it writes the
+  same `<file-annotations>` block the overview's `y` does, so you land ready to paste. If the
+  clipboard write fails, the dialog stays open with the error rather than continuing and destroying
+  what `y` promised to save.
+- **The action's own key continues and discards them**: `q` when quitting, `Enter` when switching
+  worktree (matching the picker's own confirm key).
+- **`Esc` cancels**, returning to the viewer with the annotations intact. On a switch this cancels
+  the switch itself, not just the discard.
+
+The confirm only appears when the store is non-empty, so it never interrupts a session that did not
+use annotations. Backing out of zoom with `q` is not a quit and raises no confirm. Set
+`confirm_discard = false` in the config to skip it and discard immediately.
+
+The exact concise copy format is:
+
+```text
+<file-annotations>
+- README.md -> Clarify the fallback.
+- src/app.rs:42 -> Explain the ignored result.
+- src/controller/mod.rs:42-47 -> Why is this guarded twice?
+</file-annotations>
+```
+
+File-level entries omit the line field, so ` -> ` (not `:`) separates the reference from the note:
+the reference keeps its greppable `path:line` shape, and because `>` is escaped in both paths and
+notes, the arrow is unambiguous even when a note contains a colon. Notes and paths escape `&`, `<`,
+and `>` so the single outer wrapper cannot be spoofed; the copied block has no heading, blank lines,
+root path, or trailing newline.
+
+## Copying paths and lines
+
+- **Copy a path**: `y` copies the selected file's **repo-relative** path (e.g. `src/app.rs`); `Y`
+  copies its **absolute** path — handy for pasting into a prompt, a command, or an agent.
+- **Copy a line reference or content**: with the content pane focused (or zoomed), `L` enters
+  **line-select mode**. `Enter` copies a repo-relative reference like `src/app.rs:42` or
+  `src/app.rs:42-58`; `y`/`Y` copy the selected line content itself. A mouse click-drag selects text
+  character-by-character.
+
+Both use the terminal's **OSC 52** clipboard escape, so the copy travels through herdr (and SSH) to
+your real clipboard with no extra tooling. Full mechanics — extending a selection, wrapped-view
+behavior, the OSC 52 caveat — are in the [keys reference](keys.md#copy-a-line-reference-or-line-content-l).
+
+## Handing a file off
+
+The viewer is read-only; to *act* on a file it hands off to another tool:
+
+- **Edit** (`e`): open the selected file in the editor you set as `editor` in
+  [config.toml](configuration.md) (or, with none set, your `$EDITOR`). The viewer suspends, runs the
+  editor, and resumes when it exits. See [opening in an editor](keys.md#opening-in-an-editor).
+- **Open with default app** (`O`): hand the file or directory to the OS default application (an
+  image opens in the system viewer, and so on). Non-blocking — the viewer keeps running.
+- **Reveal in file manager** (`R`): open Finder / Explorer / a Linux file manager with the entry
+  highlighted where supported, so you can drag it out (e.g. into Slack).
+
+All three are read-only hand-offs; the viewer never modifies a file itself. The `open` / `reveal`
+commands are [configurable](configuration.md).
+
+## Switching worktree
+
+Press `W` to re-root the viewer at **another git worktree** of the repo without relaunching. It
+opens a picker that marks the current worktree and pre-selects the one a herdr agent is working in,
+so you can jump straight to an agent's checkout. `↑`/`↓` move, `Enter` switches, `Esc` cancels.
+Read-only: it changes only *what you're viewing*, never the branch or any files.
+
+## In-app help
+
+Press `?` to open a view-only **help overlay** with sections for **Keybindings** (every action's
+config-var name, effective keys, and description, marking your customizations), **What's New** (the
+latest changelog, rendered as markdown), **Settings** (your effective configuration), and **About**
+(version, repo, license, and update status). Keyboard and mouse; `Esc` or `q` closes it. A `? help`
+hint rides the content pane's bottom border so the overlay is discoverable without already knowing
+the key.
+
+## Staying up to date
+
+The viewer checks for a new release at most once a day (off the UI thread, over a read-only
+`git ls-remote`) and, when you're behind, shows an "update available" banner naming the new version
+and the update command. Press `u` to dismiss it for the session. The check and banner can be turned
+off — see [install & updating](install.md#updating) and the `update_check`
+[config key](configuration.md).
+
+## Using the mouse
+
+The mouse is additive and on by default: use the tree-header `[-]` button to collapse the whole
+tree, `[p]`/`[P]` to pin/unpin it, and `[x]` to explicitly close it. Click a tree row to select it, double-click to
+open/expand, right-click any tree row to open a compact four-item context menu (**Open workspace
+here**, **Open pane here**, absolute path, relative path), use the wheel to
+scroll, drag a
+scrollbar or the divider, and drag over content text to
+select-and-copy without any mode. The full gesture table is in the [keys reference](keys.md#mouse).
+`Shift`+drag is deliberately left to your terminal's own native selection.
+
+The editor, OS-app, and reveal actions are intentionally omitted from the compact menu; their
+keyboard shortcuts (`e`, `O`, `R`) remain active.
+
+**Open pane here** (`G`) uses the same folder rule as **Open workspace here**: a directory opens
+itself, while a file opens its parent directory. It asks herdr to create a focused split below the
+viewer; if the host command is unavailable or fails, the viewer stays open and shows an error
+notice.
