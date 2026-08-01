@@ -68,7 +68,7 @@ fn unix_one_pane_launcher_uses_the_validated_config_layout() {
         script.contains("plugin pane open")
             && script.contains("--target-pane \"$target_pane\"")
             && script.contains("--placement split"),
-        "the one-third path must launch the manifest pane directly"
+        "the one-pane path must launch the manifest pane directly"
     );
     assert!(
         script.contains("pane resize")

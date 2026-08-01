@@ -371,12 +371,12 @@ keyboard shortcuts (`e`, `O`, `R`) remain active.
 **Open workspace here** (`s`) uses that same folder rule and creates a new workspace with its
 terminal focused. The workspace label, terminal cwd, and File Viewer tree all use that exact
 selected folder—even when it is nested inside a git repository—while git status and diffs remain
-scoped to that subtree. By default it opens File Viewer directly as the rightmost third, leaving the
-terminal with the remaining two thirds and without a focus jump. Set
+scoped to that subtree. By default it opens File Viewer directly at one fifth of the workspace,
+leaving the terminal with the remaining four fifths and without a focus jump. Set
 [`open_workspace_with_viewer = false`](configuration.md) for a terminal-only new workspace, or
 change [`viewer_pane_ratio`](configuration.md) to size the viewer. **Open pane here** (`G`) asks herdr to create a focused split below the viewer; if a
 host command is unavailable or fails, the viewer stays open and shows an error notice.
 
-When you summon File Viewer normally, it also uses the configured right-side ratio (one third by
+When you summon File Viewer normally, it also uses the configured right-side ratio (one fifth by
 default) if the current workspace contains only one pane. Existing multi-pane workspaces keep
 herdr's normal split behavior unchanged.

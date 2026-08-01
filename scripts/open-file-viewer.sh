@@ -24,8 +24,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 viewer_bin="$script_dir/../target/release/advanced-herdr-file-viewer"
 
 # Launcher protocol: `<terminal-ratio> <resize-direction|none> <resize-amount>`. Keep the current
-# one-third behavior as a safe fallback if the binary/config helper is unavailable or malformed.
-viewer_layout="0.666667 right 0.166667"
+# one-fifth behavior as a safe fallback if the binary/config helper is unavailable or malformed.
+viewer_layout="0.800000 right 0.300000"
 if [ -x "$viewer_bin" ]; then
   candidate_layout="$("$viewer_bin" --viewer-pane-layout 2>/dev/null || true)"
   if [[ "$candidate_layout" =~ ^0\.[0-9]{6}\ (right|left|none)\ 0\.[0-9]{6}$ ]]; then

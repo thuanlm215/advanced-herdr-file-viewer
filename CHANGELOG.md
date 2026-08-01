@@ -9,8 +9,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 - Portable Unicode DevOps and shell icons distinguish Jenkins, Docker/Compose, GitHub Actions, Kubernetes, Helm, YAML, Terraform, and scripts without a Nerd Font. → [configuration](docs/configuration.md)
-- **Open workspace here** now keeps the new workspace terminal focused at two thirds and opens File Viewer directly in the right third; normal File Viewer launch uses the same 1/3 split for a one-pane tab. → [usage](docs/usage.md#using-the-mouse) · [keys](docs/keys.md)
-- Configurable workspace launch: `open_workspace_with_viewer` can leave a new workspace terminal-only, while validated `viewer_pane_ratio` (0.20–0.80, default 1/3) sizes one-pane File Viewer launches. → [configuration](docs/configuration.md)
+- **Open workspace here** now keeps the new workspace terminal focused at four fifths and opens File Viewer directly in the right fifth; normal File Viewer launch uses the same 1/5 split for a one-pane tab. → [usage](docs/usage.md#using-the-mouse) · [keys](docs/keys.md)
+- Configurable workspace launch: `open_workspace_with_viewer` can leave a new workspace terminal-only, while validated `viewer_pane_ratio` (0.20–0.80, default 1/5) sizes one-pane File Viewer launches. → [configuration](docs/configuration.md)
 - Context-menu rows are numbered; `1`–`4` execute the matching action directly. → [keys](docs/keys.md)
 
 ### Changed

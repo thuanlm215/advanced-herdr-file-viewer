@@ -43,8 +43,8 @@ $ViewerBin = Join-Path $PluginRoot 'target\release\advanced-herdr-file-viewer.ex
 
 # Read the validated one-pane layout from the same config resolver as the TUI. The protocol is
 # `<terminal-ratio> <resize-direction|none> <resize-amount>`; Windows' `pane split --ratio` needs
-# only the terminal share. Preserve today's one-third viewer as the safe fallback.
-$TerminalRatio = '0.666667'
+# only the terminal share. Preserve today's one-fifth viewer as the safe fallback.
+$TerminalRatio = '0.800000'
 if (Test-Path $ViewerBin) {
     try {
         $layout = (& $ViewerBin --viewer-pane-layout 2>$null | Select-Object -First 1)

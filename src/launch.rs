@@ -63,7 +63,7 @@ struct WorkspaceInfo {
 /// - A `"Files"` pane **in the focused pane's tab**: `CLOSE` it when it *is* the focused pane
 ///   ("toggle off"), otherwise `FOCUS` it. A Files pane in any other tab is ignored.
 /// - With no Files pane, exactly one safe pane in the focused workspace → `OPEN_THIRD <pane_id>`:
-///   launcher glue splits that pane using the validated `viewer_pane_ratio` (one third by default).
+///   launcher glue splits that pane using the validated `viewer_pane_ratio` (one fifth by default).
 ///   Any multi-pane layout remains `OPEN`, preserving the host's existing split behavior.
 /// - A pane id that is not flag-safe is never emitted (→ `OPEN`), so a host-supplied id can
 ///   never option-inject when the launcher passes it to `herdr pane zoom|close`.
@@ -346,9 +346,9 @@ mod tests {
     }
 
     #[test]
-    fn files_pane_in_another_workspace_does_not_block_a_one_third_split_here() {
+    fn files_pane_in_another_workspace_does_not_block_a_one_fifth_split_here() {
         // The focused workspace wE has one pane; a Files pane in wC must not be touched, and
-        // the singleton wE workspace still receives the 1/3 first-viewer layout.
+        // the singleton wE workspace still receives the configured first-viewer layout.
         let j = list(&[
             pane("wE:p1", "", true, "wE:t1"),
             pane("wC:pD", "Files", false, "wC:t1"),
