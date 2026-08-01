@@ -39,6 +39,22 @@ fn git_repo_root_is_the_repository_toplevel() {
 }
 
 #[test]
+fn exact_root_keeps_a_nested_workspace_folder_but_retains_git_facts() {
+    let dir = TempDir::new();
+    git(dir.path(), &["init", "-q"]);
+    let sub = dir.path().join("nested/inner");
+    fs::create_dir_all(&sub).unwrap();
+    let r = resolve(&LaunchContext {
+        cwd: sub.clone(),
+        exact_root: true,
+        ..Default::default()
+    });
+    assert!(r.is_git_repo);
+    assert_eq!(canon(&r.root), canon(&sub));
+    assert_eq!(canon(r.repo_root.as_deref().unwrap()), canon(dir.path()));
+}
+
+#[test]
 fn linked_worktree_root_is_the_worktree_and_is_flagged() {
     let main = TempDir::new();
     init_repo_with_commit(main.path());

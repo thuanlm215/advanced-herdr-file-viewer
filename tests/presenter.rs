@@ -5,9 +5,9 @@ use herdr_file_viewer::annotation::LineRange;
 use herdr_file_viewer::git::Status;
 use herdr_file_viewer::presenter::{
     AnnotationEditorKind, AnnotationEditorView, AnnotationIndicatorsView, AnnotationOverviewView,
-    AnnotationRowView, AnnotationTargetView, CharSelView, ContentSearch, DiscardConfirmView,
-    FinderView, FlashLine, Focus, HelpView, LineSelectView, PickerRowView, PickerView, ViewState,
-    WorkspaceSearchView, draw, geometry,
+    AnnotationRowView, AnnotationTargetView, CharSelView, ContentSearch, ContextMenuItemRowView,
+    ContextMenuView, DiscardConfirmView, FinderView, FlashLine, Focus, HelpView, LineSelectView,
+    PickerRowView, PickerView, ViewState, WorkspaceSearchView, draw, geometry,
 };
 use herdr_file_viewer::render::to_text;
 use herdr_file_viewer::search::Match;
@@ -185,16 +185,21 @@ fn tree_icon_modes_render_portable_nerd_and_off_variants() {
 }
 
 #[test]
-fn unicode_icons_distinguish_common_devops_files_without_a_nerd_font() {
+fn unicode_icons_distinguish_common_devops_and_shell_files_without_a_nerd_font() {
     let mut state = sample_state();
     state.notices = vec![];
     state.tree_icons = herdr_file_viewer::config::TreeIcons::Unicode;
     state.nodes = [
-        "Jenkinsfile",
+        "test.Jenkinsfile",
         "Dockerfile",
+        "docker-compose.yml",
+        ".github/workflows/ci.yml",
+        "k8s/deployment.yaml",
+        "charts/app/Chart.yaml",
         "pipeline.yaml",
         "main.tf",
         "variables.tfvars",
+        "deploy.sh",
     ]
     .into_iter()
     .map(|name| node(&format!("/r/{name}"), NodeKind::File, 0, false, None))
@@ -202,11 +207,53 @@ fn unicode_icons_distinguish_common_devops_files_without_a_nerd_font() {
     state.selected = 0;
 
     let out = render(&state, 100, 24);
-    assert!(out.contains("● Jenkinsfile"), "{out}");
+    assert!(out.contains("⚙ test.Jenkinsfile"), "{out}");
     assert!(out.contains("▰ Dockerfile"), "{out}");
-    assert!(out.contains("◇ pipeline.yaml"), "{out}");
-    assert!(out.contains("◈ main.tf"), "{out}");
-    assert!(out.contains("◈ variables.tfvars"), "{out}");
+    assert!(out.contains("▰ docker-compose.yml"), "{out}");
+    assert!(out.contains("↻ ci.yml"), "{out}");
+    assert!(out.contains("☸ deployment.yaml"), "{out}");
+    assert!(out.contains("⎈ Chart.yaml"), "{out}");
+    assert!(out.contains("≋ pipeline.yaml"), "{out}");
+    assert!(out.contains("△ main.tf"), "{out}");
+    assert!(out.contains("◇ variables.tfvars"), "{out}");
+    assert!(out.contains("❯ deploy.sh"), "{out}");
+}
+
+#[test]
+fn context_menu_rows_show_their_one_based_direct_select_numbers() {
+    let mut state = sample_state();
+    state.context_menu = Some(ContextMenuView {
+        items: vec![
+            ContextMenuItemRowView {
+                label: "Open workspace here".to_string(),
+                shortcut: "s".to_string(),
+            },
+            ContextMenuItemRowView {
+                label: "Open pane here".to_string(),
+                shortcut: "G".to_string(),
+            },
+            ContextMenuItemRowView {
+                label: "Copy absolute path".to_string(),
+                shortcut: "Y".to_string(),
+            },
+            ContextMenuItemRowView {
+                label: "Copy relative path".to_string(),
+                shortcut: "y".to_string(),
+            },
+        ],
+        cursor: 0,
+        anchor: (8, 4),
+    });
+
+    let out = render(&state, 100, 24);
+    for (number, label) in [
+        (1, "Open workspace here"),
+        (2, "Open pane here"),
+        (3, "Copy absolute path"),
+        (4, "Copy relative path"),
+    ] {
+        assert!(out.contains(&format!("{number}. {label}")), "{out}");
+    }
 }
 
 #[test]

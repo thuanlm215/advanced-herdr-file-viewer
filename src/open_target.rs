@@ -51,6 +51,10 @@ pub enum CliAction {
     LaunchDecision,
     /// Print a tab-launcher decision from stdin JSON, then exit.
     LaunchDecisionTab,
+    /// Extract a validated pane id from a `pane split` JSON response, then exit.
+    OpenedPaneId,
+    /// Print the validated one-pane launcher layout derived from config, then exit.
+    ViewerPaneLayout,
     /// Start the TUI; `open` is the raw `--open` value when present (env is layered in `app::run`).
     Run { open: Option<String> },
 }
@@ -60,7 +64,7 @@ pub enum CliAction {
 /// Degrades, never fails:
 /// - unknown flags are ignored (herdr may append args we do not control)
 /// - a bare `--open` with no value is ignored (start with no open target)
-/// - `--launch-decision` / `--launch-decision-tab` win over a normal run (and over `--open`)
+/// - launcher helper flags win over a normal run (and over `--open`)
 ///
 /// `--open` values must not look like flags (`-…`); a following `-x` is left for the next
 /// iteration so it can be ignored as unknown rather than treated as a path.
@@ -72,6 +76,8 @@ where
     let mut open_flag: Option<String> = None;
     let mut launch_tab = false;
     let mut launch = false;
+    let mut opened_pane_id = false;
+    let mut viewer_pane_layout = false;
     let mut args = args.into_iter().peekable();
     while let Some(arg) = args.next() {
         let arg = arg.as_ref();
@@ -84,6 +90,8 @@ where
                 launch = true;
                 launch_tab = true;
             }
+            "--opened-pane-id" => opened_pane_id = true,
+            "--viewer-pane-layout" => viewer_pane_layout = true,
             "--open" => {
                 let take = args
                     .peek()
@@ -107,7 +115,11 @@ where
             }
         }
     }
-    if launch {
+    if viewer_pane_layout {
+        CliAction::ViewerPaneLayout
+    } else if opened_pane_id {
+        CliAction::OpenedPaneId
+    } else if launch {
         if launch_tab {
             CliAction::LaunchDecisionTab
         } else {
@@ -484,6 +496,28 @@ mod tests {
         assert_eq!(
             parse_args(["--open", "src/a.rs", "--launch-decision"]),
             CliAction::LaunchDecision
+        );
+    }
+
+    #[test]
+    fn parse_args_opened_pane_id_wins_over_other_modes() {
+        assert_eq!(
+            parse_args(["--launch-decision", "--opened-pane-id", "--open", "a.rs"]),
+            CliAction::OpenedPaneId
+        );
+    }
+
+    #[test]
+    fn parse_args_viewer_pane_layout_wins_over_other_modes() {
+        assert_eq!(
+            parse_args([
+                "--launch-decision",
+                "--opened-pane-id",
+                "--viewer-pane-layout",
+                "--open",
+                "a.rs",
+            ]),
+            CliAction::ViewerPaneLayout
         );
     }
 

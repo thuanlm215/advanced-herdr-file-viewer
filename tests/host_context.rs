@@ -1,6 +1,6 @@
 //! Host Adapter: parse the injected launch context (AC-26).
 
-use herdr_file_viewer::host::{from_env, parse_context};
+use herdr_file_viewer::host::{apply_exact_root, from_env, parse_context};
 use std::path::PathBuf;
 
 #[test]
@@ -114,4 +114,18 @@ fn malformed_json_still_yields_none_workspace_id() {
     // AC-26: malformed JSON → minimal context with no workspace_id, no panic.
     let ctx = parse_context(Some("{ this is not json"), PathBuf::from("/fallback"));
     assert_eq!(ctx.workspace_id, None);
+}
+
+#[test]
+fn exact_root_override_replaces_host_cwd_and_marks_the_boundary() {
+    let ctx = parse_context(
+        Some(r#"{"focused_pane_cwd":"/repo"}"#),
+        PathBuf::from("/plugin"),
+    );
+    let ctx = apply_exact_root(ctx, Some("/repo/nested"));
+    assert_eq!(ctx.cwd, PathBuf::from("/repo/nested"));
+    assert!(ctx.exact_root);
+
+    let unchanged = apply_exact_root(ctx.clone(), Some(""));
+    assert_eq!(unchanged, ctx);
 }

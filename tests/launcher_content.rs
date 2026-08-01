@@ -61,6 +61,38 @@ fn windows_json_consumers_force_utf8_before_convert_from_json() {
     }
 }
 
+#[test]
+fn unix_one_pane_launcher_uses_the_validated_config_layout() {
+    let script = read_script("open-file-viewer.sh");
+    assert!(
+        script.contains("plugin pane open")
+            && script.contains("--target-pane \"$target_pane\"")
+            && script.contains("--placement split"),
+        "the one-third path must launch the manifest pane directly"
+    );
+    assert!(
+        script.contains("pane resize")
+            && script.contains("--viewer-pane-layout")
+            && script.contains("--direction \"$resize_direction\"")
+            && script.contains("--amount \"$resize_amount\"")
+            && script.contains("\"$resize_direction\" != \"none\""),
+        "the direct launch must apply the validated ratio, including the exact-half no-op"
+    );
+    assert!(
+        !script.contains("pane run"),
+        "Unix direct launch must not create an intermediate shell or depend on shell readiness"
+    );
+}
+
+#[test]
+fn windows_one_pane_launcher_uses_the_validated_config_terminal_ratio() {
+    let script = read_script("open-file-viewer.ps1");
+    assert!(
+        script.contains("--viewer-pane-layout") && script.contains("'--ratio', $TerminalRatio"),
+        "the Windows split must use the terminal share produced by the config resolver"
+    );
+}
+
 fn assert_utf8_before_json(label: &str, text: &str) {
     let convert = text
         .find("ConvertFrom-Json")

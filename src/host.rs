@@ -7,6 +7,10 @@ use crate::context::LaunchContext;
 use serde::Deserialize;
 use std::path::PathBuf;
 
+/// Internal launch override used by **Open workspace here**. It is passed only to the newly
+/// opened plugin pane; normal viewer launches retain the worktree-root behavior.
+pub const EXACT_ROOT_ENV: &str = "ADVANCED_HERDR_FILE_VIEWER_EXACT_ROOT";
+
 /// The shape of `HERDR_PLUGIN_CONTEXT_JSON`. Every field is optional so a partial or absent
 /// object degrades gracefully rather than failing to parse; unknown fields are ignored.
 #[derive(Deserialize, Default)]
@@ -28,7 +32,19 @@ struct RawContext {
 pub fn from_env() -> LaunchContext {
     let json = std::env::var("HERDR_PLUGIN_CONTEXT_JSON").ok();
     let cwd = std::env::current_dir().unwrap_or_default();
-    parse_context(json.as_deref(), cwd)
+    let exact_root = std::env::var(EXACT_ROOT_ENV).ok();
+    apply_exact_root(parse_context(json.as_deref(), cwd), exact_root.as_deref())
+}
+
+/// Apply the internal exact-root override without consulting process-global environment.
+///
+/// Kept as a pure function so the host-boundary behavior is hermetic in tests.
+pub fn apply_exact_root(mut ctx: LaunchContext, raw: Option<&str>) -> LaunchContext {
+    if let Some(path) = raw.filter(|path| !path.is_empty()) {
+        ctx.cwd = PathBuf::from(path);
+        ctx.exact_root = true;
+    }
+    ctx
 }
 
 /// Pure parser behind [`from_env`] (testable without touching process env). Missing or
@@ -48,6 +64,7 @@ pub fn parse_context(json: Option<&str>, fallback_cwd: PathBuf) -> LaunchContext
         .unwrap_or(fallback_cwd);
     LaunchContext {
         cwd,
+        exact_root: false,
         base_branch: raw.base_branch,
         workspace_id: raw.workspace_id.filter(|s| !s.is_empty()),
     }

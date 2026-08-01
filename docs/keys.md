@@ -29,16 +29,16 @@ is additive and on by default.
 | `e` | Open the selected file in `$EDITOR` (see [Opening in an editor](#opening-in-an-editor)) |
 | `O` (Shift+`o`) | **Open with default app**: hand the selected file or directory to the OS default application (e.g. an image opens in the system viewer). Read-only hand-off; non-blocking (the viewer keeps running) |
 | `R` (Shift+`r`) | **Reveal in file manager**: open the OS file manager (Finder / Explorer / a Linux file manager) with the selected entry highlighted where supported, so you can drag it out (e.g. into Slack). Read-only hand-off |
-| `f` | **Go to file**: fuzzy-find in the selected folder (or a selected file's parent); `Tab` or the scope button toggles workspace search, `↑` / `↓` move, `Enter` opens, `Esc` closes (`←` / `→` scroll long paths) |
-| `F` (Shift+`f`) | **Search text** with ripgrep: search inside the selected file or folder; `Tab` or the scope button toggles workspace search, `↑`/`↓` move, `Enter` opens the result at its line, and `Esc` closes |
+| `f` | **Go to file**: fuzzy-find across the workspace; `Tab` or the scope button switches to the selected folder (or a selected file's parent), `↑` / `↓` move, `Enter` opens, `Esc` closes (`←` / `→` scroll long paths) |
+| `F` (Shift+`f`) | **Search text** with ripgrep across the workspace; `Tab` or the scope button switches to the selected file or folder, `↑`/`↓` move, `Enter` opens the result at its line, and `Esc` closes |
 | `:` | **Go to line**: open a prompt and jump the content pane to a source line by number (`Enter` jumps, `Esc` cancels; out-of-range clamps to the last line). Works in any view; in a rendered-markdown or diff view, confirming switches to the line-numbered content view and jumps there |
 | `/` | **Search in file**: open a prompt and highlight every match in the content pane as you type; `Enter` commits the search (highlights persist), `Esc` clears it and restores the scroll. Smartcase (a lowercase query is case-insensitive; a capital makes it case-sensitive). Works in any view |
 | `n` / `N` (Shift+`n`) | After a committed search, jump to the **next** / **previous** match and scroll it into view, wrapping at the ends with a notice |
 | `y` | Copy the selected file's **repo-relative** path to the clipboard (e.g. `src/app.rs`) |
 | `Y` | Copy the selected file's **absolute** path to the clipboard |
-| `s` | **Open workspace**: open a new herdr workspace in the selected directory |
+| `s` | **Open workspace**: open a new herdr workspace in the selected directory; by default its terminal stays focused while File Viewer opens at the configured ratio |
 | `G` (Shift+`g`) | **Open pane here**: open a focused herdr terminal pane below the viewer, rooted at the selected directory (or the selected file's parent directory) |
-| `Space` | **Show context menu**: open a popup menu of actions for the selected tree node (`↑`/`↓` move, `Enter` selects, `Esc` closes; can also be opened by right-clicking on a tree item) |
+| `Space` | **Show context menu**: open a numbered popup menu of actions for the selected tree node (`1`–`4` choose directly; `↑`/`↓` move, `Enter` selects, `Esc` closes; can also be opened by right-clicking on a tree item) |
 | `a` | **Add annotation**: open the annotation editor for the selected file (`←`/`→` or `Home`/`End` move the text cursor, `Enter` saves, `Esc` cancels). Annotations live only for this viewer session and never modify the file |
 | `A` (Shift+`a`) | **Show annotations**: open the session overview; fixed keys `j`/`k` or `↑`/`↓` move, `Enter`/`e` edits, `d` deletes one, `D` (Shift+`d`) clears all immediately, `y` copies all, and `Esc`/`q` closes |
 | `Tab` | Move focus between the tree and content columns |
@@ -104,7 +104,7 @@ two products:
   gutter is stripped and indentation is preserved, so it pastes as real code.
 - **`a` adds an annotation** whose target is the selected line/range (or all lines covered by a
   mouse text selection). This `a` is a fixed line-select control, independent of the remappable
-  global `add_annotation` key.
+global `add_annotation` key.
 
 A confirmation notice names what was copied. Both copies use the same **OSC 52** path as the
 tree's `y`/`Y`. `Esc` leaves the mode.
@@ -124,7 +124,7 @@ The viewer is keyboard-first; the mouse is additive and on by default:
 | Gesture | Action |
 | --- | --- |
 | **Click** a tree row | Select it (focus the tree) |
-| **Right-click** a tree row | Open the compact context menu: open workspace, open pane here, copy absolute path, copy relative path (`e`, `O`, and `R` remain available directly from the keyboard) |
+| **Right-click** a tree row | Open the compact numbered context menu: `1` workspace, `2` pane here, `3` absolute path, `4` relative path (`e`, `O`, and `R` remain available directly from the keyboard) |
 | **Double-click** a folder | Expand / collapse it (same as `Enter`) |
 | **Click `[-]` in the tree header** | Collapse every open directory from the tree root |
 | **Click `[p]` / `[P]` in the tree header** | Pin / unpin the viewer (`[P]` means pinned) |

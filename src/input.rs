@@ -384,7 +384,7 @@ pub(crate) const REGISTRY: &[Binding] = &[
         intent: Intent::OpenFinder,
         name: "open_finder",
         default_keys: &[KeyCode::Char('f')],
-        description: "Open the go-to-file finder in the selected folder; Tab toggles workspace scope.",
+        description: "Open the workspace go-to-file finder; Tab switches to the selected folder.",
         category: "Search & jump",
     },
     Binding {

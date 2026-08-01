@@ -43,7 +43,7 @@ pub struct FinderState {
 }
 
 impl FinderState {
-    /// Build a selection-scoped `FinderState` with an empty prompt.
+    /// Build a workspace-scoped `FinderState` with an empty prompt.
     pub fn new(
         workspace_candidates: Vec<String>,
         selection_scope: &Path,
@@ -56,11 +56,11 @@ impl FinderState {
             .collect();
         Self {
             prompt: PromptInput::default(),
-            candidates: selection_candidates.clone(),
+            candidates: workspace_candidates.clone(),
             workspace_candidates,
             selection_candidates,
             selection_label,
-            workspace: false,
+            workspace: true,
             matches: Vec::new(),
             cursor: 0,
             hscroll: 0,

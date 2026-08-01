@@ -131,16 +131,16 @@ const HELP_FOOTER_HINT: &str = "Tab/←→ switch · 1-9 jump · j/k scroll · E
 /// the run loop injects an implementation bound to the real repository. `Send + Sync` so the
 /// diff query can run on the render worker thread, off the input path (AC-23).
 pub trait GitService: Send + Sync {
-    /// Working-tree status per repo-root-relative path (drives tree markers, AC-7).
+    /// Working-tree status per visible-tree-relative path (drives tree markers, AC-7).
     fn status(&self) -> BTreeMap<PathBuf, Status>;
     /// The set of files changed against `baseline` (drives the changed-only filter, AC-6,
     /// and is recomputed when the baseline toggles, AC-16).
     fn changed_set(&self, baseline: Baseline) -> BTreeMap<PathBuf, Status>;
-    /// Raw unified diff text for one repo-root-relative path against `baseline` (AC-9). With
+    /// Raw unified diff text for one visible-tree-relative path against `baseline` (AC-9). With
     /// `full_context`, git emits the whole file as context (for the full-file diff view);
     /// otherwise it returns the compact hunks-only diff.
     fn diff(&self, rel_path: &Path, baseline: Baseline, full_context: bool) -> String;
-    /// Raw unified diff for every tracked change under a repo-root-relative directory against
+    /// Raw unified diff for every tracked change under a visible-tree-relative directory against
     /// `baseline`. Empty `rel_dir` means the whole tree root. Used by git-status mode (`d`)
     /// when a directory is selected.
     fn diff_directory(&self, rel_dir: &Path, baseline: Baseline) -> String;
@@ -573,6 +573,10 @@ pub struct Controller {
     /// `confirm_discard`, default `true`). When `false`, `q` quits and discards, which
     /// is the pre-confirm behavior.
     confirm_discard: bool,
+    /// Whether `Open workspace here` also launches this plugin in the newly-created workspace.
+    open_workspace_with_viewer: bool,
+    /// Viewer share used when opening into a workspace/tab that initially has one terminal pane.
+    viewer_pane_ratio: crate::config::ViewerPaneRatio,
     changed_only: bool,
     /// Which command a Diff/FullDiff render delegates to (`D`, cycling Delta →
     /// DeltaSideBySide → Raw). Carried
@@ -893,6 +897,9 @@ impl Controller {
             hide_hidden: false,
             // Defaults ON, matching the resolver: a Controller built without config still guards.
             confirm_discard: true,
+            // Preserve the shipped behavior for controllers/tests that do not wire config.
+            open_workspace_with_viewer: true,
+            viewer_pane_ratio: crate::config::ViewerPaneRatio::default(),
             tree_hscroll: 0,
             tree_scroll: 0,
             tree_follow_selection: true,
@@ -1439,6 +1446,16 @@ impl Controller {
     /// Apply the config-driven `confirm_discard` switch. Pure in-memory wiring.
     pub fn apply_confirm_discard(&mut self, confirm: bool) {
         self.confirm_discard = confirm;
+    }
+
+    /// Apply the Herdr workspace-launch preferences resolved from config.
+    pub fn apply_workspace_launch_settings(
+        &mut self,
+        open_workspace_with_viewer: bool,
+        viewer_pane_ratio: crate::config::ViewerPaneRatio,
+    ) {
+        self.open_workspace_with_viewer = open_workspace_with_viewer;
+        self.viewer_pane_ratio = viewer_pane_ratio;
     }
 
     /// Apply a launch **open target** once at startup: resolve `path` under the tree **root**,

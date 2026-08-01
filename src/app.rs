@@ -74,13 +74,15 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     let factory_renderers = renderers.clone();
     let providers: Box<dyn Fn(&root::Resolved) -> RootProviders> =
         Box::new(move |resolved: &root::Resolved| {
+            let repo_root = resolved
+                .repo_root
+                .clone()
+                .unwrap_or_else(|| resolved.root.clone());
             let git: Arc<dyn GitService> = Arc::new(LiveGit {
-                // In a non-repo there is no repo_root; git is never queried then, but a path is
-                // still required, so fall back to the tree root.
-                repo_root: resolved
-                    .repo_root
-                    .clone()
-                    .unwrap_or_else(|| resolved.root.clone()),
+                // In a normal launch this is empty. Open workspace here may root the tree at a
+                // nested folder, so translate git's repo-relative paths to/from that subtree.
+                tree_prefix: tree_prefix(&repo_root, &resolved.root),
+                repo_root,
                 base_hint: resolved.base_branch.clone(),
             });
             let content: Box<dyn ContentProvider> = Box::new(LiveContent {
@@ -120,6 +122,10 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     // Apply the config-driven quit guard (`confirm_discard`): whether quitting with
     // session annotations held confirms first or discards them immediately.
     controller.apply_confirm_discard(eff.confirm_discard);
+    // Apply the Herdr launch preferences used by `Open workspace here`. The same resolved pane
+    // ratio is exposed to the normal launcher by the binary's `--viewer-pane-layout` helper.
+    controller
+        .apply_workspace_launch_settings(eff.open_workspace_with_viewer, eff.viewer_pane_ratio);
     // Apply the config-driven mouse-wheel scroll step (`scroll_lines`); already clamped to >= 1 by
     // the resolver, so the wheel always advances at least one line/item.
     controller.apply_scroll_lines(eff.scroll_lines);
@@ -438,20 +444,24 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
 /// The live Git Service: read-only queries against the resolved repository (AC-7/9/16).
 struct LiveGit {
     repo_root: PathBuf,
+    tree_prefix: PathBuf,
     base_hint: Option<String>,
 }
 
 impl GitService for LiveGit {
     fn status(&self) -> BTreeMap<PathBuf, Status> {
-        git::status(&self.repo_root)
+        scope_status(git::status(&self.repo_root), &self.tree_prefix)
     }
     fn changed_set(&self, baseline: Baseline) -> BTreeMap<PathBuf, Status> {
-        git::changed_set(&self.repo_root, baseline, self.base_hint.as_deref())
+        scope_status(
+            git::changed_set(&self.repo_root, baseline, self.base_hint.as_deref()),
+            &self.tree_prefix,
+        )
     }
     fn diff(&self, rel_path: &Path, baseline: Baseline, full_context: bool) -> String {
         git::diff(
             &self.repo_root,
-            rel_path,
+            &repo_relative(&self.tree_prefix, rel_path),
             baseline,
             self.base_hint.as_deref(),
             full_context,
@@ -460,11 +470,46 @@ impl GitService for LiveGit {
     fn diff_directory(&self, rel_dir: &Path, baseline: Baseline) -> String {
         git::diff_directory(
             &self.repo_root,
-            rel_dir,
+            &repo_relative(&self.tree_prefix, rel_dir),
             baseline,
             self.base_hint.as_deref(),
         )
     }
+}
+
+/// The selected tree root relative to the repository. Empty means the normal whole-repo view.
+fn tree_prefix(repo_root: &Path, tree_root: &Path) -> PathBuf {
+    tree_root
+        .strip_prefix(repo_root)
+        .map(Path::to_path_buf)
+        .unwrap_or_default()
+}
+
+/// Convert a path relative to the visible tree into the repo-relative path git expects.
+fn repo_relative(tree_prefix: &Path, tree_relative: &Path) -> PathBuf {
+    if tree_prefix.as_os_str().is_empty() {
+        tree_relative.to_path_buf()
+    } else {
+        tree_prefix.join(tree_relative)
+    }
+}
+
+/// Filter repo-wide git results to the visible subtree and remove its prefix for the Tree Model.
+fn scope_status(
+    statuses: BTreeMap<PathBuf, Status>,
+    tree_prefix: &Path,
+) -> BTreeMap<PathBuf, Status> {
+    if tree_prefix.as_os_str().is_empty() {
+        return statuses;
+    }
+    statuses
+        .into_iter()
+        .filter_map(|(path, status)| {
+            path.strip_prefix(tree_prefix)
+                .ok()
+                .map(|relative| (relative.to_path_buf(), status))
+        })
+        .collect()
 }
 
 /// Whether a configured renderer command invokes Delta directly. Custom tools and shell
@@ -1563,6 +1608,40 @@ mod tests {
             !r.diff.iter().any(|a| a == "--line-numbers"),
             "the compact diff does NOT add line numbers: {:?}",
             r.diff
+        );
+    }
+
+    #[test]
+    fn nested_tree_git_scope_filters_and_rebases_repo_paths() {
+        let repo = Path::new("/repo");
+        let tree = Path::new("/repo/.github");
+        let prefix = tree_prefix(repo, tree);
+        assert_eq!(prefix, PathBuf::from(".github"));
+        assert_eq!(
+            repo_relative(&prefix, Path::new("workflows/ci.yml")),
+            PathBuf::from(".github/workflows/ci.yml")
+        );
+        assert_eq!(repo_relative(&prefix, Path::new("")), prefix);
+
+        let statuses = BTreeMap::from([
+            (PathBuf::from("src/app.rs"), Status::Modified),
+            (PathBuf::from(".github/workflows/ci.yml"), Status::Untracked),
+        ]);
+        assert_eq!(
+            scope_status(statuses, &prefix),
+            BTreeMap::from([(PathBuf::from("workflows/ci.yml"), Status::Untracked)])
+        );
+    }
+
+    #[test]
+    fn whole_repo_git_scope_is_identity() {
+        let prefix = tree_prefix(Path::new("/repo"), Path::new("/repo"));
+        assert!(prefix.as_os_str().is_empty());
+        let statuses = BTreeMap::from([(PathBuf::from("src/app.rs"), Status::Modified)]);
+        assert_eq!(scope_status(statuses.clone(), &prefix), statuses);
+        assert_eq!(
+            repo_relative(&prefix, Path::new("src/app.rs")),
+            PathBuf::from("src/app.rs")
         );
     }
 }

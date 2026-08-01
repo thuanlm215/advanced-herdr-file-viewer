@@ -260,8 +260,14 @@ pub fn settings_text(
     let reveal = opener_row(&eff.reveal, &wired.reveal);
     let update_check = if eff.update_check { "on" } else { "off" };
     let confirm_discard = if eff.confirm_discard { "on" } else { "off" };
+    let open_workspace_with_viewer = if eff.open_workspace_with_viewer {
+        "on"
+    } else {
+        "off"
+    };
 
-    // Keys are padded to the widest name (`preview_max_lines`, 17) so the `=` column lines up.
+    // Preserve the established compact alignment for existing rows; the two longer Herdr launch
+    // keys remain self-explanatory without abbreviating their actual config names.
     format!(
         "{status_line}\n\
          {location_line}\n\
@@ -271,6 +277,8 @@ pub fn settings_text(
          hide_dotfiles     = {hide_dotfiles}\n\
          update_check      = {update_check}\n\
          confirm_discard   = {confirm_discard}\n\
+         open_workspace_with_viewer = {open_workspace_with_viewer}\n\
+         viewer_pane_ratio = {viewer_pane_ratio}\n\
          scroll_lines      = {scroll_lines}\n\
          tree_width        = {tree_width}\n\
          tree_position     = {tree_position}\n\
@@ -283,6 +291,8 @@ pub fn settings_text(
         hide_dotfiles = eff.hide_dotfiles,
         update_check = update_check,
         confirm_discard = confirm_discard,
+        open_workspace_with_viewer = open_workspace_with_viewer,
+        viewer_pane_ratio = eff.viewer_pane_ratio.viewer_decimal(),
         scroll_lines = eff.scroll_lines,
         tree_width = eff.tree_width,
         tree_position = eff.tree_position.label(),
@@ -778,6 +788,8 @@ mod tests {
             hide_dotfiles: true,
             update_check: false,
             confirm_discard: false,
+            open_workspace_with_viewer: false,
+            viewer_pane_ratio: crate::config::ViewerPaneRatio::resolve(Some(0.5)),
             scroll_lines: 7,
             tree_width: 25,
             tree_position: crate::config::TreePosition::Right,
@@ -815,6 +827,9 @@ mod tests {
             "reveal",
             "hide_dotfiles",
             "update_check",
+            "confirm_discard",
+            "open_workspace_with_viewer",
+            "viewer_pane_ratio",
             "scroll_lines",
             "tree_width",
             "tree_position",

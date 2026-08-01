@@ -4,8 +4,9 @@ How the viewer gets opened: the open actions, the idempotent launcher, split vs.
 `--remote` caveat. For a quick "install then bind a key," see the [Quick start](../README.md#quick-start);
 once it's open, see the [usage guide](usage.md) and [keys reference](keys.md).
 
-The viewer opens **only** in response to an explicit action. There are no event hooks and no
-automatic invocation. The manifest declares a `[[panes]]` entry (the split-pane viewer) and an
+The viewer opens **only** in response to an explicit action. There are no event hooks. The
+**Open workspace here** action can optionally open the viewer as part of that explicit workflow;
+`open_workspace_with_viewer` controls it. The manifest declares a `[[panes]]` entry (the split-pane viewer) and an
 `[[actions]]` whose command opens it:
 
 ```toml
@@ -34,6 +35,10 @@ scoped to the current tab, so invoking it repeatedly is *launch-or-focus-or-togg
 - a viewer pane open but not focused → focus it
 - the viewer pane already focused → close it (herdr has no hide-without-close; reopening just
   re-walks the tree)
+
+When the current workspace/tab initially has one pane, the new viewer uses
+[`viewer_pane_ratio`](configuration.md) of its width (one third by default). Existing multi-pane
+layouts keep herdr's normal split behavior.
 
 **One-press access: bind a key.** herdr's `config.toml` binds keys to commands; point one at the
 action so it runs with the plugin's working directory (no hard-coded paths):

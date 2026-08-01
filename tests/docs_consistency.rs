@@ -48,10 +48,13 @@ fn config_example_documents_every_config_key() {
         "hide_dotfiles",
         "update_check",
         "confirm_discard",
+        "open_workspace_with_viewer",
+        "viewer_pane_ratio",
         "scroll_lines",
         "tree_width",
         "tree_position",
         "tree_max_cols",
+        "file_icons",
         "preview_max_lines",
         "preview_max_kib",
     ] {
@@ -84,6 +87,20 @@ fn config_example_documents_every_config_key() {
             !active,
             "config.example.toml line {} must be commented out (got: {line:?})",
             n + 1
+        );
+    }
+}
+
+#[test]
+fn configuration_doc_and_example_document_workspace_viewer_layout() {
+    for key in ["open_workspace_with_viewer", "viewer_pane_ratio"] {
+        assert!(
+            CONFIG_DOC.contains(key),
+            "docs/configuration.md must document the `{key}` config key"
+        );
+        assert!(
+            CONFIG_EXAMPLE.contains(key),
+            "config.example.toml must document the `{key}` config key"
         );
     }
 }
