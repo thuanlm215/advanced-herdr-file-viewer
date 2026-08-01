@@ -10,6 +10,11 @@ use std::path::PathBuf;
 pub struct LaunchContext {
     /// The invoking pane's working directory.
     pub cwd: PathBuf,
+    /// Keep `cwd` as the tree root instead of promoting it to the git worktree top-level.
+    ///
+    /// The host adapter sets this only for the File Viewer opened by **Open workspace here**,
+    /// where the selected folder is the explicit workspace boundary.
+    pub exact_root: bool,
     /// A base-branch hint from herdr (the branch a worktree forked from).
     pub base_branch: Option<String>,
     /// The herdr workspace id the viewer was launched from (used for the agent-active overlay).

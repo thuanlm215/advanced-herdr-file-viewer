@@ -46,6 +46,84 @@ pub const MIN_TREE_MAX_COLS: u16 = 10;
 /// `MIN_TREE_MAX_COLS..=MAX_TREE_MAX_COLS`.
 pub const MAX_TREE_MAX_COLS: u16 = 1000;
 
+/// Fixed-point scale used for the Herdr pane ratio. Keeping the resolved value as an integer makes
+/// [`EffectiveSettings`] fully comparable and avoids carrying floating-point rounding through the
+/// host argv boundary.
+const VIEWER_PANE_RATIO_SCALE: u32 = 1_000_000;
+/// The current shipped layout: File Viewer takes one third of a workspace that initially has one
+/// terminal pane.
+pub const DEFAULT_VIEWER_PANE_RATIO_UNITS: u32 = 333_333;
+/// Smallest supported File Viewer share. This keeps both the viewer and the original terminal
+/// usable even when a config value is accidentally extreme.
+pub const MIN_VIEWER_PANE_RATIO: f64 = 0.20;
+/// Largest supported File Viewer share.
+pub const MAX_VIEWER_PANE_RATIO: f64 = 0.80;
+
+/// Validated File Viewer share of a one-pane Herdr workspace.
+///
+/// The config accepts a decimal (`0.333333`, `0.5`, ...). Resolution clamps finite values to
+/// `0.20..=0.80`, rounds to six decimal places, and falls back to one third for NaN/infinity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ViewerPaneRatio(u32);
+
+impl Default for ViewerPaneRatio {
+    fn default() -> Self {
+        Self(DEFAULT_VIEWER_PANE_RATIO_UNITS)
+    }
+}
+
+impl ViewerPaneRatio {
+    pub fn resolve(value: Option<f64>) -> Self {
+        let Some(value) = value.filter(|value| value.is_finite()) else {
+            return Self::default();
+        };
+        let units = (value.clamp(MIN_VIEWER_PANE_RATIO, MAX_VIEWER_PANE_RATIO)
+            * VIEWER_PANE_RATIO_SCALE as f64)
+            .round() as u32;
+        Self(units)
+    }
+
+    /// Decimal string passed to Herdr or shown in Settings, with stable six-digit precision.
+    pub fn viewer_decimal(self) -> String {
+        decimal_units(self.0)
+    }
+
+    /// The original terminal's share when the viewer is split to its right.
+    pub fn terminal_decimal(self) -> String {
+        decimal_units(VIEWER_PANE_RATIO_SCALE - self.0)
+    }
+
+    /// Resize the original terminal after Herdr's fixed 1:1 plugin split.
+    ///
+    /// Verified live against Herdr 0.7.5: `right` grows the original left terminal (viewer below
+    /// half), while `left` shrinks it (viewer above half). Exactly half needs no resize.
+    pub fn terminal_resize(self) -> Option<(&'static str, String)> {
+        const HALF: u32 = VIEWER_PANE_RATIO_SCALE / 2;
+        match self.0.cmp(&HALF) {
+            std::cmp::Ordering::Less => Some(("right", decimal_units(HALF - self.0))),
+            std::cmp::Ordering::Greater => Some(("left", decimal_units(self.0 - HALF))),
+            std::cmp::Ordering::Equal => None,
+        }
+    }
+
+    /// Stable launcher protocol consumed by the Unix and Windows wrapper scripts:
+    /// `<terminal-ratio> <resize-direction|none> <resize-amount>`.
+    pub fn launcher_spec(self) -> String {
+        let (direction, amount) = self
+            .terminal_resize()
+            .unwrap_or_else(|| ("none", "0.000000".to_string()));
+        format!("{} {direction} {amount}", self.terminal_decimal())
+    }
+}
+
+fn decimal_units(units: u32) -> String {
+    format!(
+        "{}.{:06}",
+        units / VIEWER_PANE_RATIO_SCALE,
+        units % VIEWER_PANE_RATIO_SCALE
+    )
+}
+
 /// The built-in **content preview line cap**: past this many lines a file (or a large diff) is shown
 /// as a truncated preview plus a visible notice (AC-13), not whole. `preview_max_lines` overrides it.
 /// Mirrors [`crate::render::Caps::default`]'s line cap so a config-absent run is unchanged; the
@@ -142,6 +220,14 @@ pub struct Config {
     /// thing standing between a stray `q` and losing the batch. Set `false` to quit immediately and
     /// discard them.
     pub confirm_discard: Option<bool>,
+    /// Whether `Open workspace here` also opens this plugin's File Viewer in the new workspace.
+    /// Defaults to `true`, preserving the shipped behavior. This affects only workspaces created
+    /// through the plugin action; the plugin intentionally registers no global Herdr events.
+    pub open_workspace_with_viewer: Option<bool>,
+    /// File Viewer share of a Herdr workspace/tab that initially has exactly one pane. Accepts a
+    /// decimal ratio and resolves through [`ViewerPaneRatio`] (default one third, finite values
+    /// clamped to `0.20..=0.80`).
+    pub viewer_pane_ratio: Option<f64>,
     /// The mouse-wheel **scroll step**: how many lines/items each wheel event advances. `None`
     /// falls back to [`DEFAULT_SCROLL_LINES`]; the resolver clamps any present value into
     /// `1..=`[`MAX_SCROLL_LINES`] (`0` would freeze scrolling; a larger value just page-jumps, so it
@@ -291,6 +377,10 @@ pub struct EffectiveSettings {
     /// The effective **confirm-before-discarding-annotations** switch: the config
     /// `confirm_discard` when present, else `true`. Config-or-default (no env var).
     pub confirm_discard: bool,
+    /// Whether `Open workspace here` also launches the File Viewer.
+    pub open_workspace_with_viewer: bool,
+    /// Validated viewer share used for one-pane workspace launches.
+    pub viewer_pane_ratio: ViewerPaneRatio,
     /// The effective mouse-wheel **scroll step**: the config `scroll_lines` clamped to
     /// `1..=`[`MAX_SCROLL_LINES`] when present, else [`DEFAULT_SCROLL_LINES`]. No environment
     /// variable participates — this is a config-or-default UI preference.
@@ -372,6 +462,9 @@ pub fn resolve(config: &Config, get_env: impl Fn(&str) -> Option<String>) -> Eff
         None => get_env("HERDR_FILE_VIEWER_NO_UPDATE_CHECK").is_none(),
     };
 
+    let open_workspace_with_viewer = config.open_workspace_with_viewer.unwrap_or(true);
+    let viewer_pane_ratio = ViewerPaneRatio::resolve(config.viewer_pane_ratio);
+
     // Config > default; no env var. Clamp to `1..=MAX_SCROLL_LINES`: a configured `0` can never
     // freeze scrolling and an over-large value is capped to a sane line step rather than page-jumping
     // (AC-3). A value that isn't a representable non-negative integer never reaches here — it failed
@@ -449,6 +542,8 @@ pub fn resolve(config: &Config, get_env: impl Fn(&str) -> Option<String>) -> Eff
         hide_dotfiles,
         update_check,
         confirm_discard,
+        open_workspace_with_viewer,
+        viewer_pane_ratio,
         scroll_lines,
         tree_width,
         tree_position,
@@ -624,11 +719,15 @@ mod tests {
 
     #[test]
     fn bool_fields_parse() {
-        let (config, _outcome) =
-            parse_config("hide_dotfiles = true\nupdate_check = false\nconfirm_discard = false\n");
+        let (config, _outcome) = parse_config(
+            "hide_dotfiles = true\nupdate_check = false\nconfirm_discard = false\n\
+             open_workspace_with_viewer = false\nviewer_pane_ratio = 0.5\n",
+        );
         assert_eq!(config.hide_dotfiles, Some(true));
         assert_eq!(config.update_check, Some(false));
         assert_eq!(config.confirm_discard, Some(false));
+        assert_eq!(config.open_workspace_with_viewer, Some(false));
+        assert_eq!(config.viewer_pane_ratio, Some(0.5));
     }
 
     #[test]
@@ -652,6 +751,47 @@ mod tests {
             env_ignored.confirm_discard,
             "no environment variable participates in this key"
         );
+    }
+
+    #[test]
+    fn workspace_viewer_settings_preserve_current_defaults() {
+        let effective = resolve(&Config::default(), |_| None);
+        assert!(effective.open_workspace_with_viewer);
+        assert_eq!(effective.viewer_pane_ratio.viewer_decimal(), "0.333333");
+        assert_eq!(
+            effective.viewer_pane_ratio.launcher_spec(),
+            "0.666667 right 0.166667"
+        );
+    }
+
+    #[test]
+    fn viewer_pane_ratio_validates_and_derives_host_layout() {
+        for (input, viewer, spec) in [
+            (0.10, "0.200000", "0.800000 right 0.300000"),
+            (0.50, "0.500000", "0.500000 none 0.000000"),
+            (0.60, "0.600000", "0.400000 left 0.100000"),
+            (0.90, "0.800000", "0.200000 left 0.300000"),
+        ] {
+            let effective = resolve(
+                &Config {
+                    viewer_pane_ratio: Some(input),
+                    ..Default::default()
+                },
+                |_| None,
+            );
+            assert_eq!(effective.viewer_pane_ratio.viewer_decimal(), viewer);
+            assert_eq!(effective.viewer_pane_ratio.launcher_spec(), spec);
+        }
+    }
+
+    #[test]
+    fn non_finite_viewer_pane_ratio_falls_back_to_one_third() {
+        for input in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                ViewerPaneRatio::resolve(Some(input)),
+                ViewerPaneRatio::default()
+            );
+        }
     }
 
     // --- [keys] table (T-4, AC-9, AC-13, AC-17) ---

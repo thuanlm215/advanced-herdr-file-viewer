@@ -2365,10 +2365,8 @@ fn activate_a_file_opens_it_in_zoom_mode() {
     );
 }
 
-/// A recording `HerdrCli` for the `Z` full-screen toggle: accepts any `pane zoom` (returns `{}`)
-/// and records every argv so a test can assert exactly what the viewer issued. `Z` drives the host
-/// zoom off its own `host_zoomed` flag (no state query), so this fake only ever sees
-/// `pane zoom --current --on|--off`.
+/// A recording `HerdrCli` for host layout commands. It returns a deterministic id for the
+/// File Viewer split and otherwise accepts the call, allowing tests to assert the exact argv.
 struct PaneZoomFake {
     calls: Arc<Mutex<Vec<Vec<String>>>>,
 }
@@ -2385,6 +2383,21 @@ impl HerdrCli for PaneZoomFake {
             .lock()
             .unwrap()
             .push(args.iter().map(|s| s.to_string()).collect());
+        if args.starts_with(&["pane", "split"]) {
+            return Ok(
+                r#"{"result":{"type":"pane_info","pane":{"pane_id":"w-new:p2"}}}"#.to_string(),
+            );
+        }
+        if args.len() == 7
+            && args.starts_with(&["workspace", "create", "--cwd"])
+            && args[4] == "--label"
+            && args[6] == "--focus"
+        {
+            return Ok(r#"{"result":{"workspace_id":"w-new"}}"#.to_string());
+        }
+        if args == ["pane", "list", "--workspace", "w-new"] {
+            return Ok(r#"{"result":{"panes":[{"pane_id":"w-new:p1"}]}}"#.to_string());
+        }
         Ok("{}".to_string())
     }
 }
@@ -2417,6 +2430,226 @@ fn pane_here_argv(cwd: &Path) -> Vec<String> {
     .iter()
     .map(|s| s.to_string())
     .collect()
+}
+
+/// Exact argv verified against herdr 0.7.5 (`herdr workspace create --help`). `--focus` makes
+/// the new workspace current before the viewer is split in it; the explicit label prevents
+/// Herdr from replacing a selected nested folder's visible identity with the git repo name.
+fn workspace_create_argv(cwd: &Path) -> Vec<String> {
+    let label = cwd.file_name().unwrap().to_string_lossy();
+    [
+        "workspace",
+        "create",
+        "--cwd",
+        &cwd.to_string_lossy(),
+        "--label",
+        &label,
+        "--focus",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+/// Windows must split an empty pane because Herdr cannot launch its relative manifest command.
+#[cfg(windows)]
+fn workspace_viewer_split_argv(cwd: &Path) -> Vec<String> {
+    [
+        "pane",
+        "split",
+        "--pane",
+        "w-new:p1",
+        "--direction",
+        "right",
+        "--ratio",
+        "0.666667",
+        "--cwd",
+        &cwd.to_string_lossy(),
+        "--no-focus",
+        "--env",
+        &format!(
+            "{}={}",
+            herdr_file_viewer::host::EXACT_ROOT_ENV,
+            cwd.to_string_lossy()
+        ),
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+/// Exact argv verified live against herdr 0.7.5. Unix launches the manifest pane directly into
+/// the focused new workspace, avoiding an intermediate shell pane. Supplying both `--workspace`
+/// and `--target-pane` is rejected; supplying `--cwd` resolves the relative manifest executable
+/// under the selected folder instead of the plugin root. The target pane context carries the root.
+#[cfg(not(windows))]
+fn workspace_viewer_open_argv(cwd: &Path) -> Vec<String> {
+    [
+        "plugin",
+        "pane",
+        "open",
+        "--plugin",
+        "advanced-herdr-file-viewer",
+        "--entrypoint",
+        "file-viewer",
+        "--placement",
+        "split",
+        "--target-pane",
+        "w-new:p1",
+        "--direction",
+        "right",
+        "--env",
+        &format!(
+            "{}={}",
+            herdr_file_viewer::host::EXACT_ROOT_ENV,
+            cwd.to_string_lossy()
+        ),
+        "--no-focus",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+#[cfg(not(windows))]
+fn workspace_terminal_resize_argv() -> Vec<String> {
+    [
+        "pane",
+        "resize",
+        "--pane",
+        "w-new:p1",
+        "--direction",
+        "right",
+        "--amount",
+        "0.166667",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+#[test]
+fn open_workspace_keeps_terminal_focused_and_splits_viewer_to_its_right_third() {
+    let dir = TempDir::new();
+    std::fs::write(dir.path().join("a.txt"), "x").unwrap();
+    let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
+    let calls: Arc<Mutex<Vec<Vec<String>>>> = Arc::new(Mutex::new(Vec::new()));
+    ctrl.set_host(Box::new(PaneZoomFake::new(Arc::clone(&calls))), None);
+
+    let fx = ctrl.handle(Intent::OpenWorkspace);
+
+    assert!(fx.redraw);
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls[0], workspace_create_argv(dir.path()));
+    assert_eq!(
+        calls[1],
+        ["pane", "list", "--workspace", "w-new"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+    );
+    #[cfg(not(windows))]
+    {
+        assert_eq!(calls[2], workspace_viewer_open_argv(dir.path()));
+        assert_eq!(calls[3], workspace_terminal_resize_argv());
+        assert_eq!(calls.len(), 4, "Unix must not create or run a shell pane");
+    }
+    #[cfg(windows)]
+    {
+        assert_eq!(calls[2], workspace_viewer_split_argv(dir.path()));
+        assert_eq!(&calls[3][..3], ["pane", "run", "w-new:p2"]);
+        assert_eq!(calls[4], ["pane", "rename", "w-new:p2", "Files"]);
+    }
+    assert!(
+        ctrl.action_notice()
+            .is_some_and(|notice| notice.ends_with("; terminal stays focused"))
+    );
+}
+
+#[test]
+fn open_workspace_can_leave_the_new_workspace_terminal_only() {
+    let dir = TempDir::new();
+    std::fs::write(dir.path().join("a.txt"), "x").unwrap();
+    let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
+    ctrl.apply_workspace_launch_settings(
+        false,
+        herdr_file_viewer::config::ViewerPaneRatio::default(),
+    );
+    let calls: Arc<Mutex<Vec<Vec<String>>>> = Arc::new(Mutex::new(Vec::new()));
+    ctrl.set_host(Box::new(PaneZoomFake::new(Arc::clone(&calls))), None);
+
+    let fx = ctrl.handle(Intent::OpenWorkspace);
+
+    assert!(fx.redraw);
+    assert_eq!(
+        *calls.lock().unwrap(),
+        vec![workspace_create_argv(dir.path())],
+        "disabling the auto viewer must not list, split, run, or resize panes"
+    );
+    assert!(
+        ctrl.action_notice()
+            .is_some_and(|notice| notice.ends_with("; terminal stays focused"))
+    );
+}
+
+#[cfg(not(windows))]
+#[test]
+fn open_workspace_at_half_skips_the_unnecessary_resize() {
+    let dir = TempDir::new();
+    std::fs::write(dir.path().join("a.txt"), "x").unwrap();
+    let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
+    ctrl.apply_workspace_launch_settings(
+        true,
+        herdr_file_viewer::config::ViewerPaneRatio::resolve(Some(0.5)),
+    );
+    let calls: Arc<Mutex<Vec<Vec<String>>>> = Arc::new(Mutex::new(Vec::new()));
+    ctrl.set_host(Box::new(PaneZoomFake::new(Arc::clone(&calls))), None);
+
+    ctrl.handle(Intent::OpenWorkspace);
+
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls[0], workspace_create_argv(dir.path()));
+    assert_eq!(calls[2], workspace_viewer_open_argv(dir.path()));
+    assert_eq!(
+        calls.len(),
+        3,
+        "a 1/2 split needs no resize from Herdr's 1:1"
+    );
+}
+
+#[cfg(not(windows))]
+#[test]
+fn open_workspace_above_half_shrinks_the_original_terminal_to_the_left() {
+    let dir = TempDir::new();
+    std::fs::write(dir.path().join("a.txt"), "x").unwrap();
+    let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
+    ctrl.apply_workspace_launch_settings(
+        true,
+        herdr_file_viewer::config::ViewerPaneRatio::resolve(Some(0.6)),
+    );
+    let calls: Arc<Mutex<Vec<Vec<String>>>> = Arc::new(Mutex::new(Vec::new()));
+    ctrl.set_host(Box::new(PaneZoomFake::new(Arc::clone(&calls))), None);
+
+    ctrl.handle(Intent::OpenWorkspace);
+
+    let calls = calls.lock().unwrap();
+    assert_eq!(
+        calls[3],
+        [
+            "pane",
+            "resize",
+            "--pane",
+            "w-new:p1",
+            "--direction",
+            "left",
+            "--amount",
+            "0.100000",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>(),
+        "verified Herdr 0.7.5 argv for a viewer wider than half"
+    );
 }
 
 #[test]
@@ -2531,7 +2764,7 @@ fn full_text_search_requires_rg_and_does_not_open_without_it() {
 }
 
 #[test]
-fn full_text_search_uses_selection_then_tab_switches_to_workspace() {
+fn full_text_search_uses_workspace_then_tab_switches_to_selection() {
     let dir = TempDir::new();
     let docs = dir.path().join("docs");
     std::fs::create_dir(&docs).unwrap();
@@ -2559,23 +2792,24 @@ fn full_text_search_uses_selection_then_tab_switches_to_workspace() {
             .as_ref()
             .unwrap()
             .scope_label,
-        "docs/"
+        "workspace"
     );
     ctrl.handle_workspace_search_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Char('n'),
         KeyModifiers::NONE,
     ));
     poll_workspace_search(&mut ctrl);
-    assert_eq!(calls.lock().unwrap()[0].1, docs);
+    assert_eq!(calls.lock().unwrap()[0].1, dir.path());
 
     ctrl.handle_workspace_search_key(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Tab,
         KeyModifiers::NONE,
     ));
     poll_workspace_search(&mut ctrl);
-    assert_eq!(calls.lock().unwrap()[1].1, dir.path());
+    assert_eq!(calls.lock().unwrap()[1].1, docs);
     assert!(
-        ctrl.view_state()
+        !ctrl
+            .view_state()
             .workspace_search
             .as_ref()
             .unwrap()
@@ -2623,7 +2857,8 @@ fn workspace_scope_button_is_clickable_and_search_result_opens_at_its_line() {
         button.y,
     ));
     assert!(
-        ctrl.view_state()
+        !ctrl
+            .view_state()
             .workspace_search
             .as_ref()
             .unwrap()
@@ -5234,8 +5469,6 @@ fn finder_dir() -> (TempDir, Controller) {
     std::fs::write(dir.path().join("sub").join("gamma.rs"), "c").unwrap();
     let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
     ctrl.handle(Intent::OpenFinder);
-    // Most legacy finder tests exercise the original all-workspace candidate set.
-    ctrl.handle_finder_key(key(KeyCode::Tab));
     (dir, ctrl)
 }
 
@@ -5575,7 +5808,7 @@ fn open_finder_opens_finder_with_full_candidate_list_and_empty_query() {
 }
 
 #[test]
-fn finder_defaults_to_selected_files_parent_and_tab_toggles_workspace() {
+fn finder_defaults_to_workspace_and_tab_toggles_selected_files_parent() {
     let dir = TempDir::new();
     std::fs::write(dir.path().join("alpha.txt"), "a").unwrap();
     std::fs::create_dir(dir.path().join("sub")).unwrap();
@@ -5595,8 +5828,8 @@ fn finder_defaults_to_selected_files_parent_and_tab_toggles_workspace() {
     }
     assert_eq!(ctrl.tree().selected().unwrap().path, folder);
     ctrl.handle(Intent::OpenFinder);
-    assert_eq!(ctrl.finder_candidates(), &["sub/gamma.rs".to_string()]);
-    assert_eq!(ctrl.view_state().finder.unwrap().scope_label, "sub/");
+    assert!(ctrl.view_state().finder.unwrap().workspace);
+    assert_eq!(ctrl.view_state().finder.unwrap().scope_label, "workspace");
     ctrl.handle_finder_key(key(KeyCode::Esc));
 
     ctrl.handle(Intent::Expand);
@@ -5605,32 +5838,26 @@ fn finder_defaults_to_selected_files_parent_and_tab_toggles_workspace() {
 
     ctrl.handle(Intent::OpenFinder);
     let finder = ctrl.view_state().finder.unwrap();
-    assert!(!finder.workspace);
-    assert_eq!(finder.scope_label, "sub/");
-    assert_eq!(ctrl.finder_candidates(), &["sub/gamma.rs".to_string()]);
+    assert!(finder.workspace);
+    assert_eq!(finder.scope_label, "workspace");
 
     ctrl.handle_finder_key(key(KeyCode::Char('a')));
     ctrl.handle_finder_key(key(KeyCode::Tab));
     let finder = ctrl.view_state().finder.unwrap();
-    assert!(finder.workspace);
-    assert_eq!(finder.scope_label, "workspace");
+    assert!(!finder.workspace);
+    assert_eq!(finder.scope_label, "sub/");
     assert_eq!(finder.query, "a", "scope switching retains the query");
-    assert!(
-        ctrl.finder_candidates().contains(&"alpha.txt".to_string()),
-        "workspace scope restores root-level files"
-    );
+    assert_eq!(ctrl.finder_candidates(), &["sub/gamma.rs".to_string()]);
 
     ctrl.handle_finder_key(key(KeyCode::Tab));
-    assert_eq!(ctrl.finder_candidates(), &["sub/gamma.rs".to_string()]);
-    assert_eq!(ctrl.view_state().finder.unwrap().scope_label, "sub/");
+    assert!(ctrl.view_state().finder.unwrap().workspace);
+    assert_eq!(ctrl.view_state().finder.unwrap().scope_label, "workspace");
+    assert!(ctrl.finder_candidates().contains(&"alpha.txt".to_string()));
 }
 
 #[test]
 fn clicking_finder_scope_button_toggles_like_tab() {
     let (_dir, mut ctrl) = finder_dir();
-    // `finder_dir` puts legacy tests in workspace scope; start this scope-control
-    // test from the new selection-scoped default.
-    ctrl.handle_finder_key(key(KeyCode::Tab));
     let state = ctrl.view_state();
     let mut geom = geometry(Rect::new(0, 0, 100, 24), &state);
     let button = geom
@@ -5641,8 +5868,8 @@ fn clicking_finder_scope_button_toggles_like_tab() {
 
     ctrl.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), x, y));
     let finder = ctrl.view_state().finder.unwrap();
-    assert!(finder.workspace);
-    assert_eq!(finder.scope_label, "workspace");
+    assert!(!finder.workspace);
+    assert_ne!(finder.scope_label, "workspace");
 }
 
 // ---------------------------------------------------------------------------
@@ -5666,7 +5893,6 @@ fn finder_dir_git() -> (TempDir, Controller) {
     };
     let (mut ctrl, _, _) = controller(dir.path(), true, git, false);
     ctrl.handle(Intent::OpenFinder);
-    ctrl.handle_finder_key(key(KeyCode::Tab));
     (dir, ctrl)
 }
 
@@ -6631,9 +6857,8 @@ fn finder_works_fully_in_a_non_git_directory() {
         "finder is open in a non-git root (AC-19)"
     );
 
-    // 2. Switch to workspace scope; that candidate list must be non-empty and
-    // equal to index::build(root).
-    ctrl.handle_finder_key(key(KeyCode::Tab));
+    // 2. The default workspace candidate list must be non-empty and equal to
+    // index::build(root).
     let mut got = ctrl.finder_candidates().to_vec();
     got.sort();
     let mut expected = herdr_file_viewer::index::build(dir.path());
@@ -6842,11 +7067,10 @@ fn ac_n4_fresh_controller_rebuilds_candidates_from_disk_with_no_persistent_state
         "AC-N4: no new file must appear under root from using the finder"
     );
 
-    // Second, fresh controller: workspace candidates must match index::build(root).
+    // Second, fresh controller starts in workspace scope and candidates match index::build(root).
     let (mut ctrl2, _, _) = controller(dir.path(), false, StubGit::default(), false);
     ctrl2.handle(Intent::OpenFinder);
     assert!(ctrl2.finder_open(), "fresh controller opened the finder");
-    ctrl2.handle_finder_key(key(KeyCode::Tab));
 
     let mut got = ctrl2.finder_candidates().to_vec();
     got.sort();
@@ -10339,6 +10563,8 @@ fn open_help_appends_settings_section_when_display_is_set() {
         hide_dotfiles: false,
         update_check: true,
         confirm_discard: true,
+        open_workspace_with_viewer: true,
+        viewer_pane_ratio: herdr_file_viewer::config::ViewerPaneRatio::default(),
         scroll_lines: 3,
         tree_width: 30,
         tree_position: herdr_file_viewer::config::TreePosition::Left,

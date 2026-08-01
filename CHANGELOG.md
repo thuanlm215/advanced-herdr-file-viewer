@@ -5,6 +5,20 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are short on purpose; follow the
 `→` links for the full detail.
 
+## [Unreleased]
+
+### Added
+- Portable Unicode DevOps and shell icons distinguish Jenkins, Docker/Compose, GitHub Actions, Kubernetes, Helm, YAML, Terraform, and scripts without a Nerd Font. → [configuration](docs/configuration.md)
+- **Open workspace here** now keeps the new workspace terminal focused at two thirds and opens File Viewer directly in the right third; normal File Viewer launch uses the same 1/3 split for a one-pane tab. → [usage](docs/usage.md#using-the-mouse) · [keys](docs/keys.md)
+- Configurable workspace launch: `open_workspace_with_viewer` can leave a new workspace terminal-only, while validated `viewer_pane_ratio` (0.20–0.80, default 1/3) sizes one-pane File Viewer launches. → [configuration](docs/configuration.md)
+- Context-menu rows are numbered; `1`–`4` execute the matching action directly. → [keys](docs/keys.md)
+
+### Changed
+- File and full-text search now start in workspace scope; `Tab` or the scope button switches to the selected file/folder scope. → [usage](docs/usage.md#finding-a-file-fast) · [keys](docs/keys.md)
+
+### Fixed
+- Open workspace here now keeps the selected folder consistently as the workspace label, terminal cwd, and File Viewer root while preserving subtree-scoped git features; Unix uses Herdr's verified target-pane form and plugin-root process directory, avoiding the intermediate-shell and relative-command failures. → [usage](docs/usage.md#using-the-mouse)
+
 ## [1.19.0] - 2026-07-31
 
 ### Changed

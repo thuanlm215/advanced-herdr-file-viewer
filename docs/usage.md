@@ -38,20 +38,20 @@ or drag the divider; the starting split, the tree's side, and a column cap are a
 
 ## Finding a file fast
 
-Press `f` to open a **fuzzy finder** in the selected folder (`.gitignore`-aware). When a file is
-selected, the scope is its parent folder. `Tab` or the `[Workspace]` / `[Selection]` button switches
-between that folder and the whole workspace, matching full-text search. Type to filter, `↑`/`↓` to
-move, `Enter` to open, and `Esc` to cancel. The fixed-width box is pinned to the pane top and only
+Press `f` to open a **workspace-wide fuzzy finder** (`.gitignore`-aware). `Tab` or the
+`[Selection]` / `[Workspace]` button switches to the selected folder (or a selected file's parent)
+and back, matching full-text search. Type to filter, `↑`/`↓` to move, `Enter` to open, and `Esc` to
+cancel. The fixed-width box is pinned to the pane top and only
 grows downward as results appear; once it reaches the pane height, results scroll inside it. Each
 result puts the file name first and its parent folder after it, matching VS Code's compact layout;
 files at the tree root omit the empty folder label.
 
 ## Searching across files
 
-Press `F` to search file contents with **ripgrep**. The initial scope follows the selected tree
-node: a file searches only that file; a directory searches it recursively. Press `Tab` or click
-`[Workspace]` on the search box's top border to re-run the current query against the whole tree
-root; the button becomes `[Selection]` so the original file/folder scope is one action away.
+Press `F` to search the whole workspace with **ripgrep**. Press `Tab` or click `[Selection]` on the
+search box's top border to re-run the current query in the selected tree node: a file searches only
+that file; a directory searches it recursively. The button becomes `[Workspace]` so the whole tree
+root is one action away.
 
 The search box is anchored at the top of the pane with a fixed width. Its top edge never moves:
 results only extend the bottom edge downward until the pane is full, after which the selected result
@@ -357,8 +357,9 @@ off — see [install & updating](install.md#updating) and the `update_check`
 
 The mouse is additive and on by default: use the tree-header `[-]` button to collapse the whole
 tree, `[p]`/`[P]` to pin/unpin it, and `[x]` to explicitly close it. Click a tree row to select it, double-click to
-open/expand, right-click any tree row to open a compact four-item context menu (**Open workspace
-here**, **Open pane here**, absolute path, relative path), use the wheel to
+open/expand, right-click any tree row to open a compact numbered four-item context menu: `1`
+**Open workspace here** — optionally with a File Viewer opened in the new workspace, `2` **Open pane here**,
+`3` absolute path, and `4` relative path. Use the wheel to
 scroll, drag a
 scrollbar or the divider, and drag over content text to
 select-and-copy without any mode. The full gesture table is in the [keys reference](keys.md#mouse).
@@ -367,7 +368,15 @@ select-and-copy without any mode. The full gesture table is in the [keys referen
 The editor, OS-app, and reveal actions are intentionally omitted from the compact menu; their
 keyboard shortcuts (`e`, `O`, `R`) remain active.
 
-**Open pane here** (`G`) uses the same folder rule as **Open workspace here**: a directory opens
-itself, while a file opens its parent directory. It asks herdr to create a focused split below the
-viewer; if the host command is unavailable or fails, the viewer stays open and shows an error
-notice.
+**Open workspace here** (`s`) uses that same folder rule and creates a new workspace with its
+terminal focused. The workspace label, terminal cwd, and File Viewer tree all use that exact
+selected folder—even when it is nested inside a git repository—while git status and diffs remain
+scoped to that subtree. By default it opens File Viewer directly as the rightmost third, leaving the
+terminal with the remaining two thirds and without a focus jump. Set
+[`open_workspace_with_viewer = false`](configuration.md) for a terminal-only new workspace, or
+change [`viewer_pane_ratio`](configuration.md) to size the viewer. **Open pane here** (`G`) asks herdr to create a focused split below the viewer; if a
+host command is unavailable or fails, the viewer stays open and shows an error notice.
+
+When you summon File Viewer normally, it also uses the configured right-side ratio (one third by
+default) if the current workspace contains only one pane. Existing multi-pane workspaces keep
+herdr's normal split behavior unchanged.

@@ -1,6 +1,7 @@
 //! Root Resolver — resolve the tree root and git-presence from a [`LaunchContext`].
 //!
-//! Root is the working tree's top-level inside a git repo (AC-1) else the cwd (AC-2).
+//! Root is normally the working tree's top-level inside a git repo (AC-1), unless an explicit
+//! exact-root launch keeps the selected workspace folder; outside git it is the cwd (AC-2).
 //! Not-a-repo is a normal result (`is_git_repo == false`), never an error (AC-26).
 //! Uses only read-only `git` subcommands.
 
@@ -26,10 +27,15 @@ pub struct Resolved {
 pub fn resolve(ctx: &LaunchContext) -> Resolved {
     match git_output(&ctx.cwd, &["rev-parse", "--show-toplevel"]) {
         Some(toplevel) => {
-            let root = PathBuf::from(toplevel);
+            let repo_root = PathBuf::from(toplevel);
+            let root = if ctx.exact_root {
+                ctx.cwd.clone()
+            } else {
+                repo_root.clone()
+            };
             Resolved {
                 is_git_repo: true,
-                repo_root: Some(root.clone()),
+                repo_root: Some(repo_root),
                 is_worktree: is_linked_worktree(&ctx.cwd),
                 base_branch: ctx.base_branch.clone(),
                 root,

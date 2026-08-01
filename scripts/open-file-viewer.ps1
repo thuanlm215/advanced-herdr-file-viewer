@@ -41,6 +41,18 @@ function Strip-Verbatim([string]$p) {
 $PluginRoot = Strip-Verbatim (Split-Path -Parent $PSScriptRoot)
 $ViewerBin = Join-Path $PluginRoot 'target\release\advanced-herdr-file-viewer.exe'
 
+# Read the validated one-pane layout from the same config resolver as the TUI. The protocol is
+# `<terminal-ratio> <resize-direction|none> <resize-amount>`; Windows' `pane split --ratio` needs
+# only the terminal share. Preserve today's one-third viewer as the safe fallback.
+$TerminalRatio = '0.666667'
+if (Test-Path $ViewerBin) {
+    try {
+        $layout = (& $ViewerBin --viewer-pane-layout 2>$null | Select-Object -First 1)
+        $match = [regex]::Match([string]$layout, '^(0\.[0-9]{6}) (?:right|left|none) 0\.[0-9]{6}$')
+        if ($match.Success) { $TerminalRatio = $match.Groups[1].Value }
+    } catch {}
+}
+
 # The directory to root the tree at: the focused pane's cwd (the user's work pane) at invocation
 # time. `pane list` prints JSON by default (it rejects a `--json` flag).
 function Get-UserCwd {
@@ -74,6 +86,26 @@ function Open-Pane {
     exit 0
 }
 
+function Open-Sized([string]$TargetPane) {
+    $splitArgs = @('pane', 'split', '--pane', $TargetPane, '--direction', 'right', '--ratio', $TerminalRatio, '--focus')
+    if ($env:HERDR_PLUGIN_CONFIG_DIR) {
+        $splitArgs += @('--env', "HERDR_PLUGIN_CONFIG_DIR=$env:HERDR_PLUGIN_CONFIG_DIR")
+    }
+    $out = (& $HerdrBin @splitArgs | Out-String)
+    if ($LASTEXITCODE -ne 0) { Open-Pane }
+    $np = Get-PaneId $out
+    if (-not $np) { Open-Pane }
+    # The call operator preserves a spaced absolute path; see Open-Pane for the Windows details.
+    & $HerdrBin pane run $np "& \`"$ViewerBin\`""
+    if ($LASTEXITCODE -eq 0) {
+        & $HerdrBin pane rename $np Files *> $null
+    } else {
+        # Roll back the shell split if the viewer executable could not be started.
+        & $HerdrBin pane close $np *> $null
+    }
+    exit 0
+}
+
 $Decision = 'OPEN'
 if (Test-Path $ViewerBin) {
     $panes = & $HerdrBin pane list 2>$null
@@ -85,7 +117,9 @@ if (Test-Path $ViewerBin) {
     }
 }
 
-if ($Decision -like 'FOCUS *') {
+if ($Decision -like 'OPEN_THIRD *') {
+    Open-Sized $Decision.Substring(11)
+} elseif ($Decision -like 'FOCUS *') {
     $PaneId = $Decision.Substring(6)
     & $HerdrBin pane zoom $PaneId --on *> $null
     & $HerdrBin pane zoom $PaneId --off

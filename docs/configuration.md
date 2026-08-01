@@ -40,8 +40,8 @@ A config key always wins. Only two keys also have an environment-variable fallba
 config key and above the built-in default — `editor` (`$EDITOR`) and `update_check`
 (`$HERDR_FILE_VIEWER_NO_UPDATE_CHECK`) — giving those two a `config > env > default` chain. Every
 other key (`markdown`, `diff`, `syntax`, `open`, `reveal`, `hide_dotfiles`, `confirm_discard`,
-`scroll_lines`, `tree_width`, `tree_position`, `tree_max_cols`, `file_icons`, `preview_max_lines`,
-`preview_max_kib`) has no
+`open_workspace_with_viewer`, `viewer_pane_ratio`, `scroll_lines`, `tree_width`, `tree_position`,
+`tree_max_cols`, `file_icons`, `preview_max_lines`, `preview_max_kib`) has no
 applicable environment variable; for those it's `config > default` only.
 
 ## Keys
@@ -61,7 +61,9 @@ reveal = "nautilus"
 hide_dotfiles = false       # true to hide dotfiles at startup (the `.` key still toggles)
 update_check = true         # false to disable the once-a-day update check
 confirm_discard = true      # false to discard annotations without confirming (on quit / worktree switch)
+open_workspace_with_viewer = true # false makes Open workspace here create only its terminal
 scroll_lines = 3            # mouse-wheel step (tree/content/search/help), a 1 to 10 scale: 1 slow · 3 medium · 6 fast · 10 max
+viewer_pane_ratio = 0.333333 # viewer share for a one-pane workspace/tab; 0.5 means half (clamped 0.20–0.80)
 tree_width = 30             # tree column's share of the viewer pane, percent 20-80 (content takes the rest)
 tree_max_cols = 30          # HARD CAP in columns; the SMALLER of this and tree_width% wins (raise both to widen)
 tree_position = "left"      # which side the directory tree sits on: "left" (default) or "right"
@@ -70,6 +72,19 @@ file_icons = "unicode"      # "unicode" (default), "nerd" (Nerd Font required), 
 preview_max_lines = 10000   # show at most this many lines before a truncated preview (100–100000)
 preview_max_kib = 1024      # ...or this size before truncating, in KiB (1024 = 1 MB; 64–65536)
 ```
+
+`open_workspace_with_viewer` controls only the viewer's **Open workspace here** action (`s` /
+context-menu item 1). Its default `true` preserves the built-in behavior: create the workspace,
+open File Viewer beside its initial terminal, and leave the terminal focused. Set it to `false` to
+create and focus the terminal-only workspace. It is not a global herdr workspace hook; workspaces
+created outside this plugin are unchanged.
+
+`viewer_pane_ratio` controls File Viewer's share when it opens beside the only existing pane in a
+workspace/tab. Use a decimal ratio: `0.333333` is the default one-third viewer, and `0.5` gives each
+pane half. Finite values are validated and clamped to `0.20..=0.80`; non-finite values fall back to
+one third. The setting applies both to normal File Viewer summoning in a one-pane workspace and to
+the viewer opened by **Open workspace here**. Existing multi-pane layouts keep herdr's normal split
+behavior, and opening File Viewer in its own tab still fills that tab.
 
 `tree_width` and `tree_max_cols` **together** decide the tree's startup width, and the **smaller of
 the two wins**: the tree is drawn at `min(tree_width% of the pane, tree_max_cols)`. So if you set
@@ -83,8 +98,9 @@ by dragging the divider, and an explicit resize lifts the cap.
 
 `file_icons` controls the glyphs before file-tree entries, file-finder results, and full-text search
 results. `unicode` is the portable default: it uses colored, standard Unicode symbols that work with
-common fonts such as Cascadia Mono, with distinct cues for Jenkinsfile, Dockerfile, YAML, Terraform,
-Rust, Markdown, JSON, scripts, web files, images, and archives. `nerd` uses colored Devicon-style
+common fonts such as Cascadia Mono, with distinct DevOps cues for Jenkinsfile, Docker/Compose,
+GitHub Actions workflows, Kubernetes manifests, Helm charts, YAML, Terraform (`.tf` / `.tfvars`),
+and shell scripts, as well as Rust, Markdown, JSON, web files, images, and archives. `nerd` uses colored Devicon-style
 glyphs and requires a Nerd Font in the terminal; `off` restores compact text-only rows.
 
 `preview_max_lines` and `preview_max_kib` cap how much of a file the content pane shows: a file is
@@ -173,13 +189,13 @@ customized).
 | | `reveal_in_file_manager` | `R` | Reveal the selected entry in the OS file manager |
 | | `copy_repo_path` | `y` | Copy the selected node's repo-relative path to the clipboard |
 | | `copy_abs_path` | `Y` | Copy the selected node's absolute path to the clipboard |
-| | `open_workspace` | `s` | Open a new herdr workspace in the selected directory |
+| | `open_workspace` | `s` | Open a new herdr workspace, optionally launch its configured-width File Viewer, then focus the terminal |
 | | `open_pane_here` | `G` | Open a focused herdr terminal pane below the viewer in the selected directory |
-| | `show_context_menu` | `Space` | Open the context menu for the selected tree node |
+| | `show_context_menu` | `Space` | Open the numbered context menu for the selected tree node (`1`–`4` choose directly) |
 | **Annotations** | `add_annotation` | `a` | Add an in-memory annotation for the selected file |
 | | `show_annotations` | `A` | Open the session annotation overview |
-| **Search & jump** | `open_finder` | `f` | Open the folder/workspace go-to-file fuzzy finder |
-| | `open_text_search` | `F` | Search text in the selected file/folder with ripgrep; the modal can switch to workspace scope |
+| **Search & jump** | `open_finder` | `f` | Open the workspace go-to-file fuzzy finder; the modal can switch to selection scope |
+| | `open_text_search` | `F` | Search workspace text with ripgrep; the modal can switch to the selected file/folder |
 | | `open_go_to_line` | `:` | Open the go-to-line prompt |
 | | `open_search` | `/` | Open the in-file search prompt |
 | | `next_match` | `n` | Jump to the next search match (wraps) |

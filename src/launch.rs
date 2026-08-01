@@ -23,6 +23,38 @@ struct Pane {
     tab_id: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct PaneOpen {
+    result: PaneOpenResult,
+}
+
+#[derive(Deserialize)]
+struct PaneOpenResult {
+    pane_id: Option<String>,
+    pane: Option<PaneId>,
+}
+
+#[derive(Deserialize)]
+struct PaneId {
+    pane_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct WorkspaceCreate {
+    result: WorkspaceCreateResult,
+}
+
+#[derive(Deserialize)]
+struct WorkspaceCreateResult {
+    workspace_id: Option<String>,
+    workspace: Option<WorkspaceInfo>,
+}
+
+#[derive(Deserialize)]
+struct WorkspaceInfo {
+    workspace_id: Option<String>,
+}
+
 /// Decide the launcher action from a herdr `pane list` JSON, returning one line: `OPEN`,
 /// `FOCUS <pane_id>`, or `CLOSE <pane_id>`.
 ///
@@ -30,6 +62,9 @@ struct Pane {
 ///   the safe default is to spawn a fresh viewer, never to act on a pane in an unknown tab.
 /// - A `"Files"` pane **in the focused pane's tab**: `CLOSE` it when it *is* the focused pane
 ///   ("toggle off"), otherwise `FOCUS` it. A Files pane in any other tab is ignored.
+/// - With no Files pane, exactly one safe pane in the focused workspace → `OPEN_THIRD <pane_id>`:
+///   launcher glue splits that pane using the validated `viewer_pane_ratio` (one third by default).
+///   Any multi-pane layout remains `OPEN`, preserving the host's existing split behavior.
 /// - A pane id that is not flag-safe is never emitted (→ `OPEN`), so a host-supplied id can
 ///   never option-inject when the launcher passes it to `herdr pane zoom|close`.
 pub fn launch_decision(pane_list_json: &str) -> String {
@@ -47,6 +82,22 @@ pub fn launch_decision(pane_list_json: &str) -> String {
         .iter()
         .find(|p| p.label.as_deref() == Some("Files") && p.tab_id.as_deref() == tab);
     let Some(files) = files else {
+        let focused_workspace = workspace_of(focused);
+        let in_current_workspace = panes
+            .iter()
+            .filter(|pane| workspace_of(pane) == focused_workspace)
+            .collect::<Vec<_>>();
+        if focused_workspace.is_some()
+            && in_current_workspace.len() == 1
+            && let Some(id) = in_current_workspace[0]
+                .pane_id
+                .as_deref()
+                .filter(|id| is_flag_safe(id))
+        {
+            // Kept as an internal protocol token for launcher compatibility; the width is no
+            // longer hard-coded to a third and comes from `--viewer-pane-layout`.
+            return format!("OPEN_THIRD {id}");
+        }
         return "OPEN".to_string();
     };
     // Never emit a pane id that could option-inject `herdr pane zoom|close <id>`.
@@ -58,6 +109,52 @@ pub fn launch_decision(pane_list_json: &str) -> String {
     } else {
         format!("FOCUS {id}")
     }
+}
+
+/// Extract the safe pane id returned by `herdr pane split`.
+///
+/// The controller uses this response immediately to run and name the File Viewer in a new,
+/// unfocused split. Invalid host data is discarded rather than ever reaching another CLI argv.
+pub fn opened_pane_id(split_json: &str) -> Option<String> {
+    let result = serde_json::from_str::<PaneOpen>(split_json).ok()?.result;
+    result
+        .pane_id
+        .or_else(|| result.pane.and_then(|pane| pane.pane_id))
+        .filter(|id| is_flag_safe(id))
+}
+
+/// Extract the workspace id returned by `herdr workspace create`.
+///
+/// Herdr 0.7.5 returns `result.workspace_id`; accepting the nested form as well makes this
+/// adapter tolerant of the corresponding workspace-info response shape without guessing from
+/// the active workspace. Invalid values are never used as a CLI target.
+pub fn created_workspace_id(create_json: &str) -> Option<String> {
+    let result = serde_json::from_str::<WorkspaceCreate>(create_json)
+        .ok()?
+        .result;
+    result
+        .workspace_id
+        .or_else(|| {
+            result
+                .workspace
+                .and_then(|workspace| workspace.workspace_id)
+        })
+        .filter(|id| is_flag_safe(id))
+}
+
+/// Return the one safe pane id in a newly created workspace.
+///
+/// The caller passes `pane list --workspace <id>` output. Requiring exactly one pane means an
+/// asynchronous host update can at worst produce a helpful notice; it can never split another
+/// workspace's focused pane.
+pub fn sole_pane_id(pane_list_json: &str) -> Option<String> {
+    let list = serde_json::from_str::<PaneList>(pane_list_json).ok()?;
+    let mut panes = list.result.panes.into_iter();
+    let pane = panes.next()?;
+    if panes.next().is_some() {
+        return None;
+    }
+    pane.pane_id.filter(|id| is_flag_safe(id))
 }
 
 /// Decide the launcher action for the **tab** variant (`scripts/open-file-viewer-tab.sh`),
@@ -170,6 +267,15 @@ mod tests {
     #[test]
     fn no_files_pane_opens() {
         let j = list(&[pane("wE:p1", "", true, "wE:t1")]);
+        assert_eq!(launch_decision(&j), "OPEN_THIRD wE:p1");
+    }
+
+    #[test]
+    fn no_files_in_a_multi_pane_workspace_keeps_normal_open_behavior() {
+        let j = list(&[
+            pane("wE:p1", "", true, "wE:t1"),
+            pane("wE:p2", "", false, "wE:t1"),
+        ]);
         assert_eq!(launch_decision(&j), "OPEN");
     }
 
@@ -192,11 +298,69 @@ mod tests {
     }
 
     #[test]
-    fn files_pane_in_another_tab_is_ignored() {
-        // The focused pane is in tab wE:t1; a Files pane in wC:t1 must not be touched.
+    fn opened_pane_id_accepts_only_a_safe_split_response() {
+        assert_eq!(
+            opened_pane_id(r#"{"result":{"pane_id":"wE:pD"}}"#).as_deref(),
+            Some("wE:pD")
+        );
+        // Herdr 0.7.5's actual `pane split` response is a `pane_info` result containing
+        // `result.pane.pane_id` (verified from its embedded success-response schema).
+        assert_eq!(
+            opened_pane_id(
+                r#"{"id":"cli:pane:split","result":{"type":"pane_info","pane":{"pane_id":"wE:pN"}}}"#
+            )
+            .as_deref(),
+            Some("wE:pN")
+        );
+        assert_eq!(opened_pane_id(r#"{"result":{"pane_id":"--bad"}}"#), None);
+        assert_eq!(
+            opened_pane_id(r#"{"result":{"type":"pane_info","pane":{"pane_id":"--nested-bad"}}}"#),
+            None
+        );
+        assert_eq!(opened_pane_id("not json"), None);
+    }
+
+    #[test]
+    fn workspace_and_sole_pane_ids_require_safe_unambiguous_host_responses() {
+        assert_eq!(
+            created_workspace_id(r#"{"result":{"workspace_id":"w-new"}}"#).as_deref(),
+            Some("w-new")
+        );
+        assert_eq!(
+            created_workspace_id(r#"{"result":{"workspace":{"workspace_id":"w-nested"}}}"#)
+                .as_deref(),
+            Some("w-nested")
+        );
+        assert_eq!(
+            created_workspace_id(r#"{"result":{"workspace_id":"--bad"}}"#),
+            None
+        );
+        assert_eq!(
+            sole_pane_id(r#"{"result":{"panes":[{"pane_id":"w-new:p1"}]}}"#).as_deref(),
+            Some("w-new:p1")
+        );
+        assert_eq!(
+            sole_pane_id(r#"{"result":{"panes":[{"pane_id":"w:p1"},{"pane_id":"w:p2"}]}}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn files_pane_in_another_workspace_does_not_block_a_one_third_split_here() {
+        // The focused workspace wE has one pane; a Files pane in wC must not be touched, and
+        // the singleton wE workspace still receives the 1/3 first-viewer layout.
         let j = list(&[
             pane("wE:p1", "", true, "wE:t1"),
             pane("wC:pD", "Files", false, "wC:t1"),
+        ]);
+        assert_eq!(launch_decision(&j), "OPEN_THIRD wE:p1");
+    }
+
+    #[test]
+    fn an_additional_tab_in_the_same_workspace_keeps_normal_open_behavior() {
+        let j = list(&[
+            pane("wE:p1", "", true, "wE:t1"),
+            pane("wE:p2", "", false, "wE:t2"),
         ]);
         assert_eq!(launch_decision(&j), "OPEN");
     }

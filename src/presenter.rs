@@ -540,20 +540,61 @@ fn file_icon(
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
+    // Standard Unicode approximations of common DevOps Nerd Font glyphs. Keep these to
+    // single-cell, text-font characters: Windows Terminal + Cascadia Mono renders them reliably
+    // and ratatui keeps every tree/search row aligned without a bundled font.
+    let path_lower = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let is_yaml = matches!(ext.as_str(), "yaml" | "yml");
+    let in_dir = |dir: &str| path_lower.starts_with(dir) || path_lower.contains(&format!("/{dir}"));
+    let is_github_workflow = in_dir(".github/workflows/");
+    let is_helm_chart = matches!(name_lower.as_str(), "chart.yaml" | "chart.yml")
+        || (is_yaml && in_dir("templates/"));
+    let is_kubernetes_manifest = is_yaml
+        && (in_dir("k8s/")
+            || in_dir("kubernetes/")
+            || in_dir("manifests/")
+            || matches!(
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "deployment"
+                    | "service"
+                    | "ingress"
+                    | "configmap"
+                    | "secret"
+                    | "daemonset"
+                    | "statefulset"
+                    | "namespace"
+                    | "kustomization"
+            ));
     match mode {
         TreeIcons::Unicode
-            if name_lower == "jenkinsfile" || name_lower.starts_with("jenkinsfile.") =>
+            if name_lower == "jenkinsfile"
+                || name_lower.starts_with("jenkinsfile.")
+                || name_lower.ends_with(".jenkinsfile") =>
         {
-            ("● ", Some(Color::LightRed))
+            ("⚙ ", Some(Color::LightRed))
         }
         TreeIcons::Unicode
-            if name_lower == "dockerfile" || name_lower.starts_with("dockerfile.") =>
+            if name_lower == "dockerfile"
+                || name_lower.starts_with("dockerfile.")
+                || name_lower.starts_with("docker-compose")
+                || name_lower.starts_with("compose.") =>
         {
             ("▰ ", Some(Color::LightCyan))
         }
+        TreeIcons::Unicode if is_helm_chart => ("⎈ ", Some(Color::LightCyan)),
+        TreeIcons::Unicode if is_github_workflow => ("↻ ", Some(Color::LightBlue)),
+        TreeIcons::Unicode if is_kubernetes_manifest => ("☸ ", Some(Color::LightBlue)),
         TreeIcons::Unicode => match ext.as_str() {
-            "yaml" | "yml" => ("◇ ", Some(Color::LightMagenta)),
-            "tf" | "tfvars" | "hcl" => ("◈ ", Some(Color::LightMagenta)),
+            "yaml" | "yml" => ("≋ ", Some(Color::Yellow)),
+            "tf" | "hcl" => ("△ ", Some(Color::LightMagenta)),
+            "tfvars" => ("◇ ", Some(Color::LightMagenta)),
             "rs" => ("◆ ", Some(Color::LightRed)),
             "md" | "mdx" => ("≡ ", Some(Color::LightBlue)),
             "json" => ("▦ ", Some(Color::Yellow)),
@@ -562,7 +603,7 @@ fn file_icon(
             "ts" | "tsx" => ("■ ", Some(Color::LightBlue)),
             "py" => ("● ", Some(Color::Yellow)),
             "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat" | "cmd" => {
-                ("› ", Some(Color::LightGreen))
+                ("❯ ", Some(Color::LightGreen))
             }
             "html" | "htm" | "css" | "scss" | "sass" | "less" => ("◆ ", Some(Color::LightMagenta)),
             "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "ico" => {
@@ -3207,7 +3248,10 @@ fn context_menu_overlay_rect(area: Rect, menu: &ContextMenuView) -> Option<Rect>
     let max_label = menu
         .items
         .iter()
-        .map(|i| Line::from(format!("{} [{}]", i.label, i.shortcut)).width() + 4)
+        .enumerate()
+        .map(|(idx, item)| {
+            Line::from(format!("{}. {} [{}]", idx + 1, item.label, item.shortcut)).width() + 4
+        })
         .max()
         .unwrap_or(24) as u16;
     let width = max_label.max(24).min(area.width);
@@ -3241,9 +3285,10 @@ fn draw_context_menu_overlay(frame: &mut Frame, area: Rect, menu: &ContextMenuVi
             } else {
                 Style::new()
             };
+            let label = format!("{}. {}", idx + 1, item.label);
             let shortcut_w = Line::from(item.shortcut.as_str()).width();
             let left_w = width.saturating_sub(4 + shortcut_w as u16) as usize;
-            let label_pad = format!("{:<width$}", item.label, width = left_w);
+            let label_pad = format!("{label:<width$}", width = left_w);
             Line::from(vec![
                 Span::styled(format!(" {label_pad}"), style),
                 Span::styled(

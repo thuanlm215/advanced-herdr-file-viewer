@@ -202,7 +202,7 @@ impl WorkspaceSearchState {
             input: PromptInput::new(),
             selection_scope,
             selection_label,
-            workspace: false,
+            workspace: true,
             matches: Vec::new(),
             cursor: 0,
             pending: false,
@@ -276,13 +276,11 @@ mod tests {
     #[test]
     fn scope_toggle_preserves_the_original_selection() {
         let mut state = WorkspaceSearchState::new(PathBuf::from("/repo/docs"), "docs/".to_string());
-        assert_eq!(state.scope(Path::new("/repo")), Path::new("/repo/docs"));
-        assert_eq!(state.scope_label(), "docs/");
-        state.toggle_scope();
         assert_eq!(state.scope(Path::new("/repo")), Path::new("/repo"));
         assert_eq!(state.scope_label(), "workspace");
         state.toggle_scope();
         assert_eq!(state.scope(Path::new("/repo")), Path::new("/repo/docs"));
+        assert_eq!(state.scope_label(), "docs/");
     }
 
     #[test]
