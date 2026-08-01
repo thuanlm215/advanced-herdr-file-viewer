@@ -95,9 +95,9 @@
 
 # viewer_pane_ratio: File Viewer's share of a workspace/tab that initially has
 # exactly one pane. This controls the HERDR pane split (unlike the tree settings
-# below). Use a decimal: 0.333333 = 1/3 (default), 0.5 = 1/2. Finite values are
+# below). Use a decimal: 0.2 = 1/5 (default), 0.5 = 1/2. Finite values are
 # clamped to 0.20–0.80; existing multi-pane layouts keep herdr's normal behavior.
-#viewer_pane_ratio = 0.333333
+#viewer_pane_ratio = 0.2
 
 # TWO keys size the directory tree, and the SMALLER of the two wins:
 #

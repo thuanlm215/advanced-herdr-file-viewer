@@ -50,9 +50,9 @@ pub const MAX_TREE_MAX_COLS: u16 = 1000;
 /// [`EffectiveSettings`] fully comparable and avoids carrying floating-point rounding through the
 /// host argv boundary.
 const VIEWER_PANE_RATIO_SCALE: u32 = 1_000_000;
-/// The current shipped layout: File Viewer takes one third of a workspace that initially has one
+/// The current shipped layout: File Viewer takes one fifth of a workspace that initially has one
 /// terminal pane.
-pub const DEFAULT_VIEWER_PANE_RATIO_UNITS: u32 = 333_333;
+pub const DEFAULT_VIEWER_PANE_RATIO_UNITS: u32 = 200_000;
 /// Smallest supported File Viewer share. This keeps both the viewer and the original terminal
 /// usable even when a config value is accidentally extreme.
 pub const MIN_VIEWER_PANE_RATIO: f64 = 0.20;
@@ -61,8 +61,8 @@ pub const MAX_VIEWER_PANE_RATIO: f64 = 0.80;
 
 /// Validated File Viewer share of a one-pane Herdr workspace.
 ///
-/// The config accepts a decimal (`0.333333`, `0.5`, ...). Resolution clamps finite values to
-/// `0.20..=0.80`, rounds to six decimal places, and falls back to one third for NaN/infinity.
+/// The config accepts a decimal (`0.2`, `0.5`, ...). Resolution clamps finite values to
+/// `0.20..=0.80`, rounds to six decimal places, and falls back to one fifth for NaN/infinity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ViewerPaneRatio(u32);
 
@@ -225,7 +225,7 @@ pub struct Config {
     /// through the plugin action; the plugin intentionally registers no global Herdr events.
     pub open_workspace_with_viewer: Option<bool>,
     /// File Viewer share of a Herdr workspace/tab that initially has exactly one pane. Accepts a
-    /// decimal ratio and resolves through [`ViewerPaneRatio`] (default one third, finite values
+    /// decimal ratio and resolves through [`ViewerPaneRatio`] (default one fifth, finite values
     /// clamped to `0.20..=0.80`).
     pub viewer_pane_ratio: Option<f64>,
     /// The mouse-wheel **scroll step**: how many lines/items each wheel event advances. `None`
@@ -757,10 +757,10 @@ mod tests {
     fn workspace_viewer_settings_preserve_current_defaults() {
         let effective = resolve(&Config::default(), |_| None);
         assert!(effective.open_workspace_with_viewer);
-        assert_eq!(effective.viewer_pane_ratio.viewer_decimal(), "0.333333");
+        assert_eq!(effective.viewer_pane_ratio.viewer_decimal(), "0.200000");
         assert_eq!(
             effective.viewer_pane_ratio.launcher_spec(),
-            "0.666667 right 0.166667"
+            "0.800000 right 0.300000"
         );
     }
 
@@ -785,7 +785,7 @@ mod tests {
     }
 
     #[test]
-    fn non_finite_viewer_pane_ratio_falls_back_to_one_third() {
+    fn non_finite_viewer_pane_ratio_falls_back_to_one_fifth() {
         for input in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert_eq!(
                 ViewerPaneRatio::resolve(Some(input)),

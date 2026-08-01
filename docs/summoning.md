@@ -37,7 +37,7 @@ scoped to the current tab, so invoking it repeatedly is *launch-or-focus-or-togg
   re-walks the tree)
 
 When the current workspace/tab initially has one pane, the new viewer uses
-[`viewer_pane_ratio`](configuration.md) of its width (one third by default). Existing multi-pane
+[`viewer_pane_ratio`](configuration.md) of its width (one fifth by default). Existing multi-pane
 layouts keep herdr's normal split behavior.
 
 **One-press access: bind a key.** herdr's `config.toml` binds keys to commands; point one at the

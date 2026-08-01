@@ -63,7 +63,7 @@ update_check = true         # false to disable the once-a-day update check
 confirm_discard = true      # false to discard annotations without confirming (on quit / worktree switch)
 open_workspace_with_viewer = true # false makes Open workspace here create only its terminal
 scroll_lines = 3            # mouse-wheel step (tree/content/search/help), a 1 to 10 scale: 1 slow · 3 medium · 6 fast · 10 max
-viewer_pane_ratio = 0.333333 # viewer share for a one-pane workspace/tab; 0.5 means half (clamped 0.20–0.80)
+viewer_pane_ratio = 0.2      # viewer share for a one-pane workspace/tab; 0.5 means half (clamped 0.20–0.80)
 tree_width = 30             # tree column's share of the viewer pane, percent 20-80 (content takes the rest)
 tree_max_cols = 30          # HARD CAP in columns; the SMALLER of this and tree_width% wins (raise both to widen)
 tree_position = "left"      # which side the directory tree sits on: "left" (default) or "right"
@@ -80,9 +80,9 @@ create and focus the terminal-only workspace. It is not a global herdr workspace
 created outside this plugin are unchanged.
 
 `viewer_pane_ratio` controls File Viewer's share when it opens beside the only existing pane in a
-workspace/tab. Use a decimal ratio: `0.333333` is the default one-third viewer, and `0.5` gives each
+workspace/tab. Use a decimal ratio: `0.2` is the default one-fifth viewer, and `0.5` gives each
 pane half. Finite values are validated and clamped to `0.20..=0.80`; non-finite values fall back to
-one third. The setting applies both to normal File Viewer summoning in a one-pane workspace and to
+one fifth. The setting applies both to normal File Viewer summoning in a one-pane workspace and to
 the viewer opened by **Open workspace here**. Existing multi-pane layouts keep herdr's normal split
 behavior, and opening File Viewer in its own tab still fills that tab.
 

@@ -2462,7 +2462,7 @@ fn workspace_viewer_split_argv(cwd: &Path) -> Vec<String> {
         "--direction",
         "right",
         "--ratio",
-        "0.666667",
+        "0.800000",
         "--cwd",
         &cwd.to_string_lossy(),
         "--no-focus",
@@ -2521,7 +2521,7 @@ fn workspace_terminal_resize_argv() -> Vec<String> {
         "--direction",
         "right",
         "--amount",
-        "0.166667",
+        "0.300000",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -2529,7 +2529,7 @@ fn workspace_terminal_resize_argv() -> Vec<String> {
 }
 
 #[test]
-fn open_workspace_keeps_terminal_focused_and_splits_viewer_to_its_right_third() {
+fn open_workspace_keeps_terminal_focused_and_splits_viewer_to_its_right_fifth() {
     let dir = TempDir::new();
     std::fs::write(dir.path().join("a.txt"), "x").unwrap();
     let (mut ctrl, _, _) = controller(dir.path(), false, StubGit::default(), false);
