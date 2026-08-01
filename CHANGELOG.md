@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are short on purpose; follow the
 `→` links for the full detail.
 
-## [Unreleased]
+## [1.20.0] - 2026-08-01
 
 ### Added
 - Portable Unicode DevOps and shell icons distinguish Jenkins, Docker/Compose, GitHub Actions, Kubernetes, Helm, YAML, Terraform, and scripts without a Nerd Font. → [configuration](docs/configuration.md)
