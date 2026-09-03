@@ -17,6 +17,10 @@ const KEYS_DOC: &str = include_str!("../docs/keys.md");
 const CONFIG_DOC: &str = include_str!("../docs/configuration.md");
 const CHANGELOG: &str = include_str!("../CHANGELOG.md");
 const CONFIG_EXAMPLE: &str = include_str!("../config.example.toml");
+const USAGE_DOC: &str = include_str!("../docs/usage.md");
+const INSTALL_DOC: &str = include_str!("../docs/install.md");
+const ARCHITECTURE: &str = include_str!("../ARCHITECTURE.md");
+const SECURITY: &str = include_str!("../SECURITY.md");
 
 /// Whether `example` has a commented-out TOML assignment for `key` (a line that, after its leading
 /// `#`, reads `key = ...`). Stronger than a bare substring: the key must appear as an actual
@@ -164,6 +168,34 @@ fn configuration_doc_points_to_the_config_example_template() {
     assert!(
         CONFIG_DOC.contains("config.toml") && CONFIG_DOC.to_lowercase().contains("rename"),
         "docs/configuration.md must tell users to rename the copy to config.toml"
+    );
+}
+
+#[test]
+fn restart_resume_contract_is_documented_without_promising_ui_state() {
+    for (name, doc) in [
+        ("docs/summoning.md", include_str!("../docs/summoning.md")),
+        ("docs/usage.md", USAGE_DOC),
+        ("docs/windows.md", include_str!("../docs/windows.md")),
+    ] {
+        assert!(
+            doc.contains("same restored pane"),
+            "{name} must promise same-pane restart rather than a new pane"
+        );
+    }
+    assert!(
+        USAGE_DOC.contains("does not save the selected")
+            && USAGE_DOC.contains("pinned preview")
+            && USAGE_DOC.contains("annotations"),
+        "usage docs must state that restart launches a fresh UI session"
+    );
+    assert!(
+        INSTALL_DOC.contains("herdr 0.7.5+"),
+        "install docs must require the first herdr release with [[startup]] hooks"
+    );
+    assert!(
+        ARCHITECTURE.contains("| `resume` |") && SECURITY.contains("Pane resume records"),
+        "architecture and security docs must cover the persistent resume record"
     );
 }
 

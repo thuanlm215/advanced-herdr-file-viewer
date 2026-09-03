@@ -111,3 +111,31 @@ fn assert_utf8_before_json(label: &str, text: &str) {
         "{label} must use BOM-less UTF-8 before ConvertFrom-Json"
     );
 }
+#[test]
+fn windows_launchers_pass_the_resume_identity_and_state_dir() {
+    for name in ["open-file-viewer.ps1", "open-file-viewer-tab.ps1"] {
+        let s = read_script(name);
+        for expected in [
+            "HERDR_PLUGIN_STATE_DIR=",
+            "HERDR_PLUGIN_ID=advanced-herdr-file-viewer",
+            "HERDR_PLUGIN_ENTRYPOINT_ID=file-viewer",
+        ] {
+            assert!(
+                s.contains(expected),
+                "{name} must pass {expected} to its manually-created Windows pane"
+            );
+        }
+    }
+
+    let workspace_launcher = include_str!("../src/controller/context_menu.rs");
+    for expected in [
+        "crate::resume::STATE_DIR_ENV",
+        "crate::resume::PLUGIN_ENV",
+        "crate::resume::ENTRYPOINT_ENV",
+    ] {
+        assert!(
+            workspace_launcher.contains(expected),
+            "the Windows Open workspace here path must forward {expected}"
+        );
+    }
+}

@@ -18,6 +18,13 @@ collaborator handed you. Its security posture is built around that.
   move the cursor, clear the screen, set the window title, or otherwise drive the terminal; it
   can only paint text inside the viewer's own region.
 
+- **Pane resume records → identity-scoped, content-free state.** A managed viewer writes one
+  atomic, safe-to-delete record under `HERDR_PLUGIN_STATE_DIR`, containing only its herdr
+  socket/pane identity plus the initial launch and config paths. It never stores file content or UI
+  state. Startup considers only records for its exact socket, validates pane ids before argv use,
+  checks the pane still exists, and fails closed if any foreground process is present. Executable
+  and record paths are platform-quoted before `pane run`, so a path cannot become shell syntax.
+
 - **Untrusted repository → hardened git invocations.** Because the opened repo may be hostile,
   every `git` command is hardened against repo-controlled code execution: `--no-ext-diff` /
   `--no-textconv` refuse repo-configured diff/textconv programs, `--attr-source` reads attributes

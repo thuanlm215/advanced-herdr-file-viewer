@@ -7,6 +7,10 @@ prebuilt binary (via `scripts/fetch-or-build.ps1`) or falls back to `cargo build
 extra tooling required beyond the in-box Windows PowerShell 5.1. The open/toggle actions work via
 PowerShell launcher scripts.
 
+Like Linux and macOS, a Files pane that was open during a full herdr server restart is started
+fresh in the same restored pane. Native Windows launchers forward the plugin-state identity needed
+for that one-shot restore; no selected file, filter, scroll, pin, or annotation is persisted.
+
 - **On Windows, bind the `-windows` action ids.** herdr requires every action id to be unique, so
   the Windows launchers register as **`open-file-viewer-windows`** and
   **`open-file-viewer-tab-windows`** (the unqualified `open-file-viewer` / `open-file-viewer-tab`

@@ -56,7 +56,8 @@ is unit-testable with stubs.
 | `editor` | Hand a file off to `$EDITOR`, or the config's `editor` override (launch only — never reads or writes the file). |
 | `opener` | Read-only OS hand-off for the `O` / `R` keys: a pure per-OS argv builder (open-with-default-app / reveal-in-file-manager, overridable via the config's `open` / `reveal` keys) plus an `Opener` seam over the reused editor `Spawner`, spawned **non-blocking** (no terminal takeover, stdio nulled) so the TUI keeps running. |
 | `launch` | The "launch-or-focus-or-toggle" decision behind the shell launch scripts (pure, hermetically testable). |
-| `open_target` | Pure argv parse (`parse_args`), including launcher-helper modes, plus open-target parse/resolve (`path` / `path:line` from CLI `--open` or `HERDR_FILE_VIEWER_OPEN`, lexically normalized under the root); the controller applies a target once at startup via reveal + optional pending go-to-line. |
+| `resume` | Best-effort same-pane relaunch after a full herdr server restart: arm one minimal plugin-state record per managed viewer, reconcile only records for the current socket from the one-shot `[[startup]]` hook, prune panes that no longer exist, and `pane run` a fresh viewer only into an idle restored shell. Foreground panes fail closed, so live handoff and user commands are never duplicated or overwritten. |
+| `open_target` | Pure argv parse (`parse_args`), including launcher-helper and resume modes, plus open-target parse/resolve (`path` / `path:line` from CLI `--open` or `HERDR_FILE_VIEWER_OPEN`, lexically normalized under the root); the controller applies a target once at startup via reveal + optional pending go-to-line. |
 
 ## Data flow
 
@@ -70,6 +71,9 @@ herdr → env (HERDR_PLUGIN_CONTEXT_JSON, optional HERDR_FILE_VIEWER_OPEN)
    optional open target (CLI --open > HERDR_FILE_VIEWER_OPEN) → reveal + render [+ pending go-to-line]
           │
    event loop (app::run):  draw → poll input → handle(intent) → drain finished renders → repeat
+
+full herdr restart → restore pane/layout as idle shell → plugin `[[startup]]`
+                   → resume record for this socket/pane → `pane run` fresh viewer in place
 ```
 
 **Rendering is off the input thread.** Selecting a file *dispatches* a render job to a worker
@@ -95,15 +99,15 @@ retain file/title markers where applicable but never receive guessed source-line
   ANSI output. Each renderer is optional; a missing one degrades to plain text + a notice.
 - **Git is first-class**, woven through the tree (status markers, colors, changed-only filter,
   baseline toggle) and the content pane (diff view), not a separate mode.
-- **In-memory, ephemeral state only**, including annotations, which start empty and are scoped to
-  the current root. A successful re-root clears them; failed and same-root re-root attempts do not.
-  The one on-disk exception is the advisory, safe-to-delete update-check timestamp cache
-  (`update-check.json` under the cache dir). Apart from that, there is no persistent store; the
-  filesystem and git repo are the read-only source of truth.
+- **In-memory, ephemeral UI state only**, including annotations, which start empty and are scoped
+  to the current root. A successful re-root clears them; failed and same-root attempts do not. The
+  safe-to-delete plugin-state exception is one minimal pane-resume record per open viewer containing
+  only socket/pane identity plus initial launch/config paths. Resume never stores a selected file,
+  filter, scroll, search, pin, annotation, rendered content, or repo data.
 
 ## Trust boundaries
 
-Three untrusted inputs are handled defensively (see [SECURITY.md](SECURITY.md)):
+Four untrusted inputs are handled defensively (see [SECURITY.md](SECURITY.md)):
 
 1. **File content** is untrusted: fed to renderers on **stdin** (never as an argument), and the
    renderer output is re-sanitized so no escape sequence can drive the terminal.
@@ -112,6 +116,9 @@ Three untrusted inputs are handled defensively (see [SECURITY.md](SECURITY.md)):
    neutralized `core.fsmonitor`/`core.hooksPath`, scrubbed repo-redirecting env). This hardening
    lives in **one** shared builder so it cannot drift between callers.
 3. **The herdr-injected context** is parsed defensively and degrades to a minimal default.
+4. **Pane-resume records** are identity-scoped to the exact herdr socket and pane, schema-checked,
+   and their paths are platform-quoted before `pane run`. A foreground process makes restoration
+   fail closed.
 
 ## Tests
 

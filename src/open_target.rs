@@ -55,6 +55,10 @@ pub enum CliAction {
     OpenedPaneId,
     /// Print the validated one-pane launcher layout derived from config, then exit.
     ViewerPaneLayout,
+    /// Reconcile pane-resume records from herdr's one-shot plugin startup hook, then exit.
+    RestorePanes,
+    /// Start a fresh TUI in the restored pane using only the minimal launch record.
+    Resume { record: PathBuf },
     /// Start the TUI; `open` is the raw `--open` value when present (env is layered in `app::run`).
     Run { open: Option<String> },
 }
@@ -78,6 +82,8 @@ where
     let mut launch = false;
     let mut opened_pane_id = false;
     let mut viewer_pane_layout = false;
+    let mut restore_panes = false;
+    let mut resume_record: Option<PathBuf> = None;
     let mut args = args.into_iter().peekable();
     while let Some(arg) = args.next() {
         let arg = arg.as_ref();
@@ -92,6 +98,24 @@ where
             }
             "--opened-pane-id" => opened_pane_id = true,
             "--viewer-pane-layout" => viewer_pane_layout = true,
+            "--restore-panes" => restore_panes = true,
+            "--resume-record" => {
+                let take = args
+                    .peek()
+                    .map(|s| {
+                        let s = s.as_ref();
+                        !s.is_empty() && !s.starts_with('-')
+                    })
+                    .unwrap_or(false);
+                if take {
+                    resume_record = Some(PathBuf::from(args.next().unwrap().as_ref()));
+                }
+            }
+            a if let Some(v) = a.strip_prefix("--resume-record=")
+                && !v.is_empty() =>
+            {
+                resume_record = Some(PathBuf::from(v));
+            }
             "--open" => {
                 let take = args
                     .peek()
@@ -115,7 +139,11 @@ where
             }
         }
     }
-    if viewer_pane_layout {
+    if restore_panes {
+        CliAction::RestorePanes
+    } else if let Some(record) = resume_record {
+        CliAction::Resume { record }
+    } else if viewer_pane_layout {
         CliAction::ViewerPaneLayout
     } else if opened_pane_id {
         CliAction::OpenedPaneId
@@ -518,6 +546,26 @@ mod tests {
                 "a.rs",
             ]),
             CliAction::ViewerPaneLayout
+        );
+    }
+
+    #[test]
+    fn parse_args_restore_modes_win_over_normal_launch() {
+        assert_eq!(
+            parse_args(["--open", "src/a.rs", "--restore-panes"]),
+            CliAction::RestorePanes
+        );
+        assert_eq!(
+            parse_args(["--launch-decision", "--resume-record", "/state/p.json"]),
+            CliAction::Resume {
+                record: PathBuf::from("/state/p.json")
+            }
+        );
+        assert_eq!(
+            parse_args(["--resume-record=/state/p.json"]),
+            CliAction::Resume {
+                record: PathBuf::from("/state/p.json")
+            }
         );
     }
 

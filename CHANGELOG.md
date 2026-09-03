@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are short on purpose; follow the
 `→` links for the full detail.
 
+## [Unreleased]
+
+## [1.21.0] - 2026-09-03
+
+### Added
+- Files panes now start a fresh viewer in the same restored pane after a full herdr server restart. Normal close disarms the restart record; UI state is never persisted. → [summoning](docs/summoning.md) · [usage](docs/usage.md#after-a-herdr-server-restart)
+
 ## [1.20.0] - 2026-08-01
 
 ### Added

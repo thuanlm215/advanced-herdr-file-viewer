@@ -1,8 +1,9 @@
 # herdr-plugin.toml — manifest for the advanced-herdr-file-viewer plugin.
 #
 # A git-aware, read-only file viewer that herdr opens in a split pane beside the
-# user's current work. The viewer appears ONLY in response to an explicit action
-# (its keybinding) — there are no event hooks and no automatic invocation (AC-N4).
+# user's current work. A fresh viewer appears only in response to an explicit action; after a full
+# server restart, a one-shot startup hook may relaunch a viewer that was already open in the same
+# restored pane. There are no event hooks (AC-N4).
 #
 # Windows support is preview (see README's Windows section). Cross-platform packaging:
 #  - [[build]] has a unix (/bin/sh) and a Windows (PowerShell) entry, each gated by the
@@ -24,9 +25,9 @@
 
 id = "advanced-herdr-file-viewer"
 name = "advanced-herdr-file-viewer"
-version = "1.20.0"
+version = "1.21.0"
 description = "A git-aware, read-only file viewer: a keyboard-driven TUI in a herdr split pane."
-min_herdr_version = "0.7.0"
+min_herdr_version = "0.7.5"
 platforms = ["linux", "macos", "windows"]
 
 # Build step herdr runs at install time. Fast path: the platform's fetch-or-build script
@@ -42,6 +43,21 @@ command = ["/bin/sh", "scripts/fetch-or-build.sh"]
 platforms = ["windows"]
 command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/fetch-or-build.ps1"]
 
+# One-shot reconciliation after herdr restores its session and API socket. The helper never opens
+# a new pane: it runs a fresh viewer only in an idle restored pane carrying an armed resume record.
+# herdr 0.7.5 introduced [[startup]], hence min_herdr_version above. Platform-specific commands
+# mirror the existing relative-command limitation on native Windows.
+[[startup]]
+platforms = ["linux", "macos"]
+command = ["./target/release/advanced-herdr-file-viewer", "--restore-panes"]
+
+[[startup]]
+platforms = ["windows"]
+command = [
+  "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+  '''& (Join-Path (Join-Path $env:HERDR_PLUGIN_ROOT 'target\release') 'advanced-herdr-file-viewer.exe') --restore-panes''',
+]
+
 # The viewer pane. herdr performs the split placement on launch (AC-17); the [[actions]]
 # below summon it — declaring placement = "split" is what opens it beside the current pane.
 # No shell is involved in opening the pane itself (AC-15).
@@ -55,7 +71,8 @@ command = ["./target/release/advanced-herdr-file-viewer"]
 # launchers spawn the viewer by absolute path via `pane split`/`tab create` + `pane run` — see header.)
 
 # The action that summons the viewer (bound to a keybinding in herdr config). This is
-# the only way the viewer is opened — there is no [[events]] hook (AC-N4). herdr actions
+# the only way a new viewer is opened — there is no [[events]] hook (AC-N4). The startup hook above
+# can only relaunch a previously armed pane after server restore. herdr actions
 # run a `command`; the launcher script opens the [[panes]] entry below as a split.
 [[actions]]
 id = "open-file-viewer"

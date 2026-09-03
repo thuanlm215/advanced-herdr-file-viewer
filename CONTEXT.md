@@ -98,6 +98,9 @@ Canonical vocabulary for this repo. Glossary only: no implementation detail, no 
 - **config file**: the viewer's read-only TOML settings file, loaded once at startup
   from the herdr-provided `$HERDR_PLUGIN_CONFIG_DIR` (XDG fallback when absent). It is
   **input, not state**: the app reads it and never writes it.
+- **pane-resume record**: minimal, safe-to-delete plugin state that remembers an open viewer's
+  herdr socket/pane identity and initial launch/config paths, solely so a full server restart can
+  run a fresh viewer in the same restored pane. It contains no file content or UI state.
 - **effective setting**: the value a setting actually resolves to after precedence is
   applied: the **config file** key if present, else the environment variable, else the
   **built-in default** (config > env > default).

@@ -46,8 +46,19 @@ const RENDER_TIMEOUT: Duration = Duration::from_secs(5);
 /// `open_flag` is the CLI `--open` value when present. Combined with
 /// [`crate::open_target::OPEN_ENV`] (`HERDR_FILE_VIEWER_OPEN`) as flag > env; an absent/empty
 /// pair leaves startup selection unchanged.
-pub fn run(open_flag: Option<String>) -> io::Result<()> {
-    let ctx = host::from_env();
+pub fn run(
+    open_flag: Option<String>,
+    resumed: Option<crate::resume::ResumeLaunch>,
+) -> io::Result<()> {
+    let is_resumed = resumed.is_some();
+    let ctx = resumed
+        .as_ref()
+        .map(|launch| launch.record().launch_context().clone())
+        .unwrap_or_else(host::from_env);
+    let config_path = resumed
+        .as_ref()
+        .map(|launch| launch.record().config_path().to_path_buf())
+        .unwrap_or_else(crate::config::config_path_from_env);
     let resolved = root::resolve(&ctx);
     let baseline = git::default_baseline(&resolved);
 
@@ -56,7 +67,7 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     // in below. Kept alive (borrowed, never moved wholesale) so the Settings section (T-9) below
     // can read `eff`/`load_outcome` for the in-app Settings display. With no config file present,
     // `load_config_from_env` returns `Config::default()`, so default behavior is unchanged.
-    let (cfg, load_outcome) = crate::config::load_config_from_env();
+    let (cfg, load_outcome) = crate::config::load_config_from_path(&config_path);
     let eff = crate::config::resolve(&cfg, |k| std::env::var(k).ok());
 
     // The effective renderers (config overrides layered onto the built-in defaults, AC-7) — built
@@ -139,7 +150,11 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     // Launch open target (GH #109): CLI `--open` wins over `HERDR_FILE_VIEWER_OPEN`. Applied
     // after layout/config wiring so reveal + render see the same filters as a live session.
     // Soft-fails with an action notice; never aborts startup.
-    let open_env = std::env::var(crate::open_target::OPEN_ENV).ok();
+    // A restored viewer is intentionally fresh. Even if herdr's replacement shell retained the
+    // original pane environment, do not replay a launch-only target from that old process.
+    let open_env = (!is_resumed)
+        .then(|| std::env::var(crate::open_target::OPEN_ENV).ok())
+        .flatten();
     if let Some(raw) = crate::open_target::pick_raw_open(open_flag.as_deref(), open_env.as_deref())
         && let Some(target) = crate::open_target::parse_open_target(&raw)
     {
@@ -148,12 +163,7 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     // Format the Settings section body for the `?` overlay (AC-15, AC-18): reflects the load
     // outcome plus every effective setting, so a user can see what's actually in effect, and the
     // resolved config-file location so they know what to fix or create.
-    controller.set_settings_display(
-        &eff,
-        &load_outcome,
-        &crate::config::config_path_from_env(),
-        &settings_wired,
-    );
+    controller.set_settings_display(&eff, &load_outcome, &config_path, &settings_wired);
     // Resolve the effective key bindings from the registry + the config's `[keys]` table (Slice B,
     // T-6): `config > default`, defensively (a rejected entry reverts to its default key set). This
     // is read-only wiring (AC-23) — it only reads the already-loaded `cfg` and builds in-memory
@@ -202,6 +212,14 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     ));
 
     let mut terminal = ratatui::try_init()?;
+    // Arm relaunch only after the TUI has initialized successfully. A resumed process reuses the
+    // existing record; an ordinary managed plugin pane creates one from its injected identity.
+    // Standalone/partial environments and state I/O failures simply retain the old behavior.
+    let registration = match resumed {
+        Some(launch) => Some(launch.into_registration()),
+        None => crate::resume::runtime_env_from_process()
+            .and_then(|env| crate::resume::register(env, ctx.clone(), config_path.clone()).ok()),
+    };
     // Mouse is additive to the keyboard-first design (AC-18): herdr forwards mouse events to a
     // pane that requests capture, while reserving Shift+mouse for the terminal's own
     // selection/copy. Best-effort so a terminal without mouse support still runs.
@@ -221,8 +239,14 @@ pub fn run(open_flag: Option<String>) -> io::Result<()> {
     let outcome = event_loop(&mut terminal, &mut controller);
     let _ = execute!(io::stdout(), DisableMouseCapture);
     let _ = execute!(io::stdout(), DisableFocusChange);
-    ratatui::try_restore()?;
-    outcome
+    let restore_result = ratatui::try_restore();
+    if matches!(outcome, Ok(ExitReason::UserClosed))
+        && let Some(registration) = registration
+    {
+        registration.disarm();
+    }
+    restore_result?;
+    outcome.map(|_| ())
 }
 
 /// Route annotation-modal raw keys before configurable global decoding. Returning `Some` means
@@ -246,7 +270,15 @@ fn route_annotation_key(
 /// Draw (only when something changed), read one input (or time out), drain renders; repeat
 /// until the Close intent. Drawing only when `dirty` avoids re-walking the filesystem (the
 /// tree enumeration in `view_state`) on every idle tick.
-fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io::Result<()> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExitReason {
+    UserClosed,
+}
+
+fn event_loop(
+    terminal: &mut DefaultTerminal,
+    controller: &mut Controller,
+) -> io::Result<ExitReason> {
     let mut dirty = true; // paint the first frame
     loop {
         if dirty {
@@ -276,7 +308,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(());
+                        return Ok(ExitReason::UserClosed);
                     }
                     dirty |= fx.redraw;
                 }
@@ -292,7 +324,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(()); // finder never quits; harmless for symmetry
+                        return Ok(ExitReason::UserClosed); // finder never quits; harmless for symmetry
                     }
                     dirty |= fx.redraw;
                 }
@@ -306,7 +338,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(());
+                        return Ok(ExitReason::UserClosed);
                     }
                     dirty |= fx.redraw;
                 }
@@ -321,7 +353,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(());
+                        return Ok(ExitReason::UserClosed);
                     }
                     dirty |= fx.redraw;
                 }
@@ -334,7 +366,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(());
+                        return Ok(ExitReason::UserClosed);
                     }
                     dirty |= fx.redraw;
                 }
@@ -351,7 +383,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(());
+                        return Ok(ExitReason::UserClosed);
                     }
                     dirty |= fx.redraw;
                 }
@@ -369,7 +401,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(());
+                        return Ok(ExitReason::UserClosed);
                     }
                     dirty |= fx.redraw;
                 }
@@ -394,7 +426,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(());
+                        return Ok(ExitReason::UserClosed);
                     }
                     dirty |= fx.redraw;
                 }
@@ -408,7 +440,7 @@ fn event_loop(terminal: &mut DefaultTerminal, controller: &mut Controller) -> io
                         dirty = true;
                     }
                     if fx.quit {
-                        return Ok(());
+                        return Ok(ExitReason::UserClosed);
                     }
                     dirty |= fx.redraw;
                 }

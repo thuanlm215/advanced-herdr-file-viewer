@@ -336,6 +336,16 @@ pub fn load_config(
     read: impl Fn(&std::path::Path) -> std::io::Result<String>,
 ) -> (Config, LoadOutcome) {
     let path = config_path(get);
+    load_config_path(&path, read)
+}
+
+/// Load the config from an already-resolved path. Resume records use this seam so a viewer
+/// relaunched into herdr's restored shell still reads the same plugin-managed config rather than
+/// falling back to that shell's environment.
+pub fn load_config_path(
+    path: &std::path::Path,
+    read: impl Fn(&std::path::Path) -> std::io::Result<String>,
+) -> (Config, LoadOutcome) {
     // The config path is trusted only when ABSOLUTE. With none of `HERDR_PLUGIN_CONFIG_DIR` /
     // `XDG_CONFIG_HOME` / `HOME` resolvable, `config_path` yields a cwd-relative fallback; reading
     // it would source a "trusted" config from the (possibly untrusted) working directory — a
@@ -345,7 +355,7 @@ pub fn load_config(
     if !path.is_absolute() {
         return (Config::default(), LoadOutcome::Absent);
     }
-    match read(&path) {
+    match read(path) {
         Ok(contents) => parse_config(&contents),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             (Config::default(), LoadOutcome::Absent)
@@ -358,6 +368,11 @@ pub fn load_config(
 /// by unit tests; `load_config` is the tested unit). Used by later tasks (T-8).
 pub fn load_config_from_env() -> (Config, LoadOutcome) {
     load_config(|k| std::env::var(k).ok(), |p| std::fs::read_to_string(p))
+}
+
+/// Production wrapper for an explicit, already-resolved config path.
+pub fn load_config_from_path(path: &std::path::Path) -> (Config, LoadOutcome) {
+    load_config_path(path, |p| std::fs::read_to_string(p))
 }
 
 /// The fully-resolved, downstream-ready settings after applying the config > env > default
