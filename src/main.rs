@@ -33,6 +33,12 @@ fn main() -> std::io::Result<()> {
             println!("{}", effective.viewer_pane_ratio.launcher_spec());
             Ok(())
         }
+        CliAction::RestorePanes => {
+            let host = herdr_file_viewer::herdr::LiveHerdr::from_env();
+            herdr_file_viewer::resume::restore_from_env(&host);
+            Ok(())
+        }
+        CliAction::Resume { record } => herdr_file_viewer::run_resumed(&record),
         CliAction::Run { open } => herdr_file_viewer::run(open),
     }
 }

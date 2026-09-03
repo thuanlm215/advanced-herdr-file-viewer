@@ -3,10 +3,11 @@
 //! Produced at the herdr boundary from injected env/JSON; consumed by
 //! [`crate::root::resolve`]. Malformed host input degrades to a minimal `{ cwd }`.
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// What herdr tells the viewer about how it was launched.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LaunchContext {
     /// The invoking pane's working directory.
     pub cwd: PathBuf,

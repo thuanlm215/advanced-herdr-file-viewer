@@ -28,6 +28,7 @@ pub mod presenter;
 pub mod proc;
 pub mod prompt;
 pub mod render;
+pub mod resume;
 pub mod root;
 pub mod search;
 pub mod text_layout;
@@ -44,5 +45,14 @@ pub mod worktree;
 /// assembles the live components and drives the terminal loop until the user closes the
 /// viewer (AC-20).
 pub fn run(open_flag: Option<String>) -> std::io::Result<()> {
-    app::run(open_flag)
+    app::run(open_flag, None)
+}
+
+/// Internal entrypoint used by the startup reconciler after a full herdr restart.
+pub fn run_resumed(record_path: &std::path::Path) -> std::io::Result<()> {
+    let record = resume::load_record_for_process(record_path, |key| std::env::var(key).ok())?;
+    app::run(
+        None,
+        Some(resume::ResumeLaunch::new(record_path.to_path_buf(), record)),
+    )
 }

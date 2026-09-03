@@ -168,6 +168,17 @@ opens, shows a short notice (e.g. `Could not open …`), and leaves the tree sel
 This is launch-only. It does not retarget a Files pane that is already running; open a fresh pane
 (or close and reopen) when you need a new target.
 
+### After a herdr server restart
+
+herdr restores the workspace layout but ordinary pane processes do not survive a full server
+restart. If Files was open, the plugin automatically starts a fresh viewer in
+the same restored pane. It reuses the original launch root and config, but intentionally
+does not save the selected file, scroll, filters, search, pinned preview, annotations, or an
+in-viewer worktree switch.
+
+Closing Files normally disarms this behavior. Detaching and reattaching needs no restore because
+the original process remains alive, and a successful live handoff is detected and never duplicated.
+
 ## Viewing a file
 
 The content pane shows **the right view for each file, automatically**: a changed file shows its

@@ -71,7 +71,18 @@ function Get-PaneId([string]$json) {
 
 function Open-Pane {
     $cwd = Get-UserCwd
-    $out = (& $HerdrBin pane split --direction right --cwd $cwd --focus | Out-String)
+    $splitArgs = @('pane', 'split', '--direction', 'right', '--cwd', $cwd, '--focus')
+    if ($env:HERDR_PLUGIN_CONFIG_DIR) {
+        $splitArgs += @('--env', "HERDR_PLUGIN_CONFIG_DIR=$env:HERDR_PLUGIN_CONFIG_DIR")
+    }
+    # This pane is created manually on Windows, so pass the plugin identity/state values that a
+    # manifest-managed pane receives automatically. They let the viewer arm same-pane restart.
+    if ($env:HERDR_PLUGIN_STATE_DIR) {
+        $splitArgs += @('--env', "HERDR_PLUGIN_STATE_DIR=$($env:HERDR_PLUGIN_STATE_DIR)")
+        $splitArgs += @('--env', 'HERDR_PLUGIN_ID=advanced-herdr-file-viewer')
+        $splitArgs += @('--env', 'HERDR_PLUGIN_ENTRYPOINT_ID=file-viewer')
+    }
+    $out = (& $HerdrBin @splitArgs | Out-String)
     $np = Get-PaneId $out
     if ($np) {
         # Run the viewer by ABSOLUTE path via the PowerShell CALL OPERATOR. herdr types <command>
@@ -90,6 +101,11 @@ function Open-Sized([string]$TargetPane) {
     $splitArgs = @('pane', 'split', '--pane', $TargetPane, '--direction', 'right', '--ratio', $TerminalRatio, '--focus')
     if ($env:HERDR_PLUGIN_CONFIG_DIR) {
         $splitArgs += @('--env', "HERDR_PLUGIN_CONFIG_DIR=$env:HERDR_PLUGIN_CONFIG_DIR")
+    }
+    if ($env:HERDR_PLUGIN_STATE_DIR) {
+        $splitArgs += @('--env', "HERDR_PLUGIN_STATE_DIR=$($env:HERDR_PLUGIN_STATE_DIR)")
+        $splitArgs += @('--env', 'HERDR_PLUGIN_ID=advanced-herdr-file-viewer')
+        $splitArgs += @('--env', 'HERDR_PLUGIN_ENTRYPOINT_ID=file-viewer')
     }
     $out = (& $HerdrBin @splitArgs | Out-String)
     if ($LASTEXITCODE -ne 0) { Open-Pane }

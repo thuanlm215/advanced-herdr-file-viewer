@@ -107,3 +107,20 @@ fn manifest_windows_action_commands_parse() {
         assert_ps_parses("manifest Windows action -Command", p);
     }
 }
+
+#[test]
+fn manifest_windows_startup_command_parses() {
+    let manifest = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("herdr-plugin.toml"),
+    )
+    .expect("read manifest");
+    let payloads: Vec<&str> = manifest
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.contains("advanced-herdr-file-viewer.exe') --restore-panes"))
+        .map(|line| line.trim_end_matches(',').trim_matches('\'').trim())
+        .collect();
+
+    assert_eq!(payloads.len(), 1, "expected one Windows startup payload");
+    assert_ps_parses("manifest Windows startup -Command", payloads[0]);
+}

@@ -334,6 +334,21 @@ impl super::Controller {
                                 format!("HERDR_PLUGIN_CONFIG_DIR={config_dir}"),
                             ]);
                         }
+                        if let Ok(state_dir) = std::env::var(crate::resume::STATE_DIR_ENV)
+                            && !state_dir.is_empty()
+                        {
+                            // This Windows-only path creates a shell pane manually instead of
+                            // using the manifest entrypoint, so forward the managed identity that
+                            // lets the viewer arm same-pane restart.
+                            split_args.extend([
+                                "--env".to_string(),
+                                format!("{}={state_dir}", crate::resume::STATE_DIR_ENV),
+                                "--env".to_string(),
+                                format!("{}=advanced-herdr-file-viewer", crate::resume::PLUGIN_ENV),
+                                "--env".to_string(),
+                                format!("{}=file-viewer", crate::resume::ENTRYPOINT_ENV),
+                            ]);
+                        }
                         let split_refs = split_args.iter().map(String::as_str).collect::<Vec<_>>();
                         match herdr.run_json(&split_refs) {
                             Ok(reply) => match crate::launch::opened_pane_id(&reply) {

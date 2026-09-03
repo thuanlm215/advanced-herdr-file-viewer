@@ -63,10 +63,13 @@ and the spec chain):
 - **Presenter**: draw the two-column layout (ratatui)
 - **Input Dispatcher**: map key events → intents (crossterm)
 - **Session Controller**: orchestrate intents → state changes; holds in-memory session state
+- **Resume Service**: re-run a previously open viewer in the same pane after herdr restores a session
 - **Editor Launcher**: hand a file off to an external editor / new herdr pane
 
-State is **in-memory and ephemeral only**: no persistent store in v1; the filesystem and git repo
-are the read-only source of truth. (`ARCHITECTURE.md` is the committed module map; keep it current.)
+UI state is **in-memory and ephemeral only**. A safe-to-delete minimal pane-resume record lives in
+the plugin state directory for each open viewer (pane/socket id + launch root/config path, never UI
+state or file content).
+(`ARCHITECTURE.md` is the committed module map; keep it current.)
 
 ### Load-bearing constraints (from `constitution.md`)
 
@@ -90,7 +93,8 @@ These shape every decision; violating one is a design error, not a style nit:
   content flows through it.
 - **`ignore` 0.4.26** for fast, `.gitignore`-aware tree walking (do not hand-roll gitignore).
 - **git via the system CLI** (read-only subcommands only), no `git2`/`gix`.
-- **`serde`/`serde_json`** only for parsing `HERDR_PLUGIN_CONTEXT_JSON`.
+- **`serde`/`serde_json`** for parsing `HERDR_PLUGIN_CONTEXT_JSON` and the bounded pane-resume
+  record in the plugin state directory.
 - Tests: `cargo test` + ratatui `TestBackend` + **`insta`** (snapshots) + **`expectrl`** (pty e2e).
 - No `tokio` (off-thread rendering uses `std::thread`+`mpsc`), no `clap`. **Minimal-deps house
   style**: adding a crate is a deliberate decision, not a default.
@@ -106,11 +110,12 @@ These shape every decision; violating one is a design error, not a style nit:
   silently break it.
 - **Manifest** `herdr-plugin.toml`: declare the viewer as a `[[panes]]` entry with
   `placement = "split"` and `command = ["./target/release/advanced-herdr-file-viewer"]`, plus an
-  `[[actions]]` to summon it; `min_herdr_version = "0.7.0"`, `platforms = ["linux","macos","windows"]`
+  `[[actions]]` to summon it; `min_herdr_version = "0.7.5"`, `platforms = ["linux","macos","windows"]`
   (Windows is preview, with per-item launcher entries), and **platform-gated `[[build]]` steps**
   (`["/bin/sh","scripts/fetch-or-build.sh"]` on unix, `powershell … scripts/fetch-or-build.ps1` on
   Windows) that download the verified prebuilt binary and fall back to `cargo build --release`.
-  **No `[[events]]`** (AC-N4).
+  Platform-gated one-shot `[[startup]]` hooks reconcile armed viewers into their already-restored
+  panes after a full server restart. **No `[[events]]`** (AC-N4).
 - **Runtime host ops** via the herdr CLI (`$HERDR_BIN_PATH`, the `HerdrCli::run` / `run_json` seam in
   `src/herdr.rs`): read-only layout/query commands only — e.g. `pane zoom` (the `Z` full-screen), the
   worktree picker's queries, and the tab/split launcher scripts. The **editor hand-off is NOT a herdr

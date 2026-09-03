@@ -1,7 +1,7 @@
 //! the herdr plugin manifest is the Host Adapter's static surface.
 //!
 //! AC-17: the viewer declares a split-pane launch of the release binary.
-//! AC-N4: the viewer never auto-launches — the manifest declares no event hooks.
+//! AC-N4: no event can open a fresh viewer. A startup hook may only relaunch an armed pane.
 //!
 //! Per the plan, these read `herdr-plugin.toml` to a string and assert on its contents.
 
@@ -26,6 +26,11 @@ fn manifest() -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[test]
+fn manifest_is_valid_toml() {
+    toml::from_str::<toml::Value>(&manifest_raw()).expect("herdr-plugin.toml must parse as TOML");
 }
 
 #[test]
@@ -97,8 +102,26 @@ fn declares_split_and_tab_open_actions() {
 #[test]
 fn pins_minimum_herdr_version() {
     assert!(
-        manifest().contains(r#"min_herdr_version = "0.7.0""#),
-        "manifest must pin min_herdr_version = \"0.7.0\""
+        manifest().contains(r#"min_herdr_version = "0.7.5""#),
+        "manifest must pin min_herdr_version = \"0.7.5\" for [[startup]] support"
+    );
+}
+
+#[test]
+fn declares_platform_gated_same_pane_resume_startup_hooks() {
+    let m = manifest();
+    assert_eq!(
+        m.matches("[[startup]]").count(),
+        2,
+        "manifest must declare one Unix and one Windows startup hook"
+    );
+    assert!(
+        m.contains("platforms = [\"linux\", \"macos\"]\ncommand = [\"./target/release/advanced-herdr-file-viewer\", \"--restore-panes\"]"),
+        "Unix startup must invoke the release binary's restore mode: {m}"
+    );
+    assert!(
+        m.contains("advanced-herdr-file-viewer.exe') --restore-panes"),
+        "Windows startup must invoke the absolute release binary's restore mode: {m}"
     );
 }
 
@@ -220,11 +243,12 @@ fn no_entry_declares_an_aarch64_windows_target() {
 #[test]
 fn declares_no_event_hooks() {
     let m = manifest();
-    // AC-N4 (finder): no event-hook table — the viewer only ever opens via an explicit action.
+    // AC-N4 (finder): no event-hook table — a fresh viewer only opens via an explicit action.
     // AC-N6 (in-file-nav): search and go-to-line also have no auto/event trigger — they open
     // only via the explicit `/` (OpenSearch) and `:` (OpenGoToLine) key bindings. The manifest
-    // declaring no `[[events]]` is the Host Adapter proof of this: nothing in the manifest
-    // can cause herdr to call back into the viewer to open a prompt automatically.
+    // declaring no `[[events]]` is the Host Adapter proof that no host event can open a prompt or
+    // fresh viewer automatically. `[[startup]]` is separately constrained to reconciling an armed
+    // pane after a server restart.
     assert!(
         !m.contains("[[events]]"),
         "AC-N4/AC-N6: manifest must declare no [[events]] hooks"

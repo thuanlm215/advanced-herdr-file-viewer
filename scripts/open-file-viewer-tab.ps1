@@ -56,7 +56,18 @@ function Open-Tab {
     $cwd = Get-UserCwd
     # `tab create` makes a new tab with a shell pane (its `root_pane`); run the viewer into it by
     # absolute path and label the pane "Files" so a later launch-decision recognises it.
-    $out = (& $HerdrBin tab create --cwd $cwd --label Files --focus | Out-String)
+    $createArgs = @('tab', 'create', '--cwd', $cwd, '--label', 'Files', '--focus')
+    if ($env:HERDR_PLUGIN_CONFIG_DIR) {
+        $createArgs += @('--env', "HERDR_PLUGIN_CONFIG_DIR=$env:HERDR_PLUGIN_CONFIG_DIR")
+    }
+    # Native Windows creates the pane manually rather than through [[panes]], so forward the
+    # identity/state values needed to arm same-pane restart.
+    if ($env:HERDR_PLUGIN_STATE_DIR) {
+        $createArgs += @('--env', "HERDR_PLUGIN_STATE_DIR=$($env:HERDR_PLUGIN_STATE_DIR)")
+        $createArgs += @('--env', 'HERDR_PLUGIN_ID=advanced-herdr-file-viewer')
+        $createArgs += @('--env', 'HERDR_PLUGIN_ENTRYPOINT_ID=file-viewer')
+    }
+    $out = (& $HerdrBin @createArgs | Out-String)
     $np = Get-PaneId $out
     if ($np) {
         # Call operator + quoted absolute path so a spaced install path still launches — see

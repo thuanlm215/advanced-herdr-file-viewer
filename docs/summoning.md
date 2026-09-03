@@ -4,10 +4,13 @@ How the viewer gets opened: the open actions, the idempotent launcher, split vs.
 `--remote` caveat. For a quick "install then bind a key," see the [Quick start](../README.md#quick-start);
 once it's open, see the [usage guide](usage.md) and [keys reference](keys.md).
 
-The viewer opens **only** in response to an explicit action. There are no event hooks. The
-**Open workspace here** action can optionally open the viewer as part of that explicit workflow;
-`open_workspace_with_viewer` controls it. The manifest declares a `[[panes]]` entry (the split-pane viewer) and an
-`[[actions]]` whose command opens it:
+A new viewer opens **only** in response to an explicit action. There are no event hooks. If a full
+herdr server restart replaces an already-open viewer with the restored pane's fresh shell, the
+plugin's one-shot startup hook runs a fresh viewer back in the same restored pane; it never creates
+a new pane. The **Open workspace here** action can optionally open the viewer as part of that
+explicit workflow; `open_workspace_with_viewer` controls it. The manifest declares a `[[panes]]`
+entry (the split-pane viewer), an `[[actions]]` whose command opens it, and the bounded startup
+reconciliation:
 
 ```toml
 [[panes]]
@@ -19,7 +22,17 @@ command = ["./target/release/advanced-herdr-file-viewer"]
 id = "open-file-viewer"
 title = "Open file viewer"
 command = ["bash", "scripts/open-file-viewer.sh"]   # opens the pane via the herdr CLI
+
+[[startup]]
+command = ["./target/release/advanced-herdr-file-viewer", "--restore-panes"]
 ```
+
+The restart is a **fresh viewer session**: the initial root/config are reused, but selected file,
+scroll, filters, search, pinned preview, annotations, and an in-viewer worktree switch are not
+saved. Closing the viewer normally disarms it, so it does not return at the next restart. A normal
+client detach/reattach does not invoke the hook because the original process stays alive; a live
+handoff also leaves a live viewer alone rather than starting a duplicate. Resume metadata is a
+small, safe-to-delete record in herdr's plugin state directory and contains no file contents.
 
 Summon it by invoking the action:
 
