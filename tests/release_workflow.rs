@@ -22,9 +22,18 @@ fn triggers_on_version_tags() {
 #[test]
 fn builds_the_published_targets() {
     let w = workflow();
-    for triple in ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"] {
+    for triple in [
+        "x86_64-unknown-linux-musl",
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+    ] {
         assert!(w.contains(triple), "release must build {triple}");
     }
+    assert!(
+        !w.contains("aarch64-unknown-linux-musl"),
+        "v1.21 publishes exactly the four documented binary targets"
+    );
 }
 
 #[test]

@@ -244,15 +244,80 @@ struct ProcessInfoResult {
 
 #[derive(Deserialize)]
 struct ProcessInfo {
-    foreground_processes: Vec<serde_json::Value>,
+    foreground_process_group_id: Option<u32>,
+    shell_pid: Option<u32>,
+    foreground_processes: Vec<ForegroundProcess>,
+}
+
+#[derive(Deserialize)]
+struct ForegroundProcess {
+    pid: Option<u32>,
+    name: Option<String>,
+    #[serde(default)]
+    argv: Vec<String>,
+}
+
+impl ProcessInfo {
+    /// Herdr 0.8.2 includes the interactive shell itself in `foreground_processes` when an
+    /// ordinary restored pane is sitting at its prompt. Treat that exact shape as idle, while
+    /// failing closed for missing identity data or any child/other foreground process.
+    fn is_idle_shell(&self) -> bool {
+        if self.foreground_processes.is_empty() {
+            return true;
+        }
+        let Some(shell_pid) = self.shell_pid else {
+            return false;
+        };
+        self.foreground_process_group_id == Some(shell_pid)
+            && self.foreground_processes.len() == 1
+            && self.foreground_processes[0].pid == Some(shell_pid)
+            && self.foreground_processes[0].looks_like_shell()
+    }
+}
+
+impl ForegroundProcess {
+    fn looks_like_shell(&self) -> bool {
+        self.name
+            .as_deref()
+            .into_iter()
+            .chain(self.argv.first().map(String::as_str))
+            .any(is_known_shell)
+    }
+}
+
+fn is_known_shell(value: &str) -> bool {
+    let basename = value.rsplit(['/', '\\']).next().unwrap_or(value);
+    let normalized = basename.trim_start_matches('-').to_ascii_lowercase();
+    let normalized = normalized.strip_suffix(".exe").unwrap_or(&normalized);
+    matches!(
+        normalized,
+        "sh" | "bash"
+            | "dash"
+            | "ash"
+            | "zsh"
+            | "fish"
+            | "ksh"
+            | "mksh"
+            | "csh"
+            | "tcsh"
+            | "nu"
+            | "nushell"
+            | "elvish"
+            | "xonsh"
+            | "pwsh"
+            | "powershell"
+            | "cmd"
+    )
 }
 
 /// Reconcile every record belonging to `socket_path` against one live herdr snapshot.
 ///
 /// Verified against herdr 0.8.2 (`herdr --help`, 2026-09-03):
 /// `pane list`, `pane process-info --pane ID`, and `pane run ID COMMAND` are the exact argv used.
-/// A restored idle shell reports no `foreground_processes`; any foreground process makes this
-/// fail closed so live handoff cannot duplicate a viewer and user work is never overwritten.
+/// A restored idle shell reports either no `foreground_processes` or (Herdr 0.8.2) one process
+/// whose pid and foreground process group are both `shell_pid` and whose executable is a known
+/// interactive shell. Any other foreground shape makes this fail closed so live handoff cannot
+/// duplicate a viewer and user work is never overwritten.
 pub fn restore_with(
     host: &dyn HerdrCli,
     state_dir: &Path,
@@ -315,7 +380,7 @@ pub fn restore_with(
             summary.skipped += 1;
             continue;
         };
-        if !process.result.process_info.foreground_processes.is_empty() {
+        if !process.result.process_info.is_idle_shell() {
             summary.already_running += 1;
             continue;
         }
@@ -503,5 +568,20 @@ mod tests {
         assert!(!valid_pane_id("--current"));
         assert!(!valid_pane_id("w1:p2;echo"));
         assert!(!valid_pane_id(""));
+    }
+
+    #[test]
+    fn idle_shell_detection_accepts_common_cross_platform_executables_only() {
+        for shell in [
+            "/bin/bash",
+            "-zsh",
+            "/usr/bin/fish",
+            r"C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+            r"C:\\Windows\\System32\\CMD.EXE",
+        ] {
+            assert!(is_known_shell(shell), "expected shell: {shell}");
+        }
+        assert!(!is_known_shell("advanced-herdr-file-viewer"));
+        assert!(!is_known_shell("cargo"));
     }
 }
