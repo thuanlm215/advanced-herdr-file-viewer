@@ -1,5 +1,5 @@
 //! The release workflow's contract, asserted as text (mirrors tests/manifest.rs): it triggers on
-//! version tags, builds the four published targets (incl. x86_64-pc-windows-msvc, preview —
+//! version tags, builds the five published targets (incl. x86_64-pc-windows-msvc, preview —
 //! T-10), guards the tag against the crate version, and publishes a SHA256SUMS. These are the
 //! invariants scripts/fetch-or-build.sh and fetch-or-build.ps1 rely on; GitHub Actions itself is
 //! exercised by cutting a real tag (a manual verification step).
@@ -24,16 +24,13 @@ fn builds_the_published_targets() {
     let w = workflow();
     for triple in [
         "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-musl",
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",
         "x86_64-pc-windows-msvc",
     ] {
         assert!(w.contains(triple), "release must build {triple}");
     }
-    assert!(
-        !w.contains("aarch64-unknown-linux-musl"),
-        "v1.21 publishes exactly the four documented binary targets"
-    );
 }
 
 #[test]
