@@ -199,7 +199,7 @@ assignment for every scalar `Config` field — keep its key list in lockstep wit
 3. Protected `main` → bump via a **`release/vX.Y.Z` PR** → green CI → merge.
 4. **Tag `vX.Y.Z` AT the merge commit** (`git tag -a vX.Y.Z <merge-sha>` → push) so a bare
    `herdr plugin install`'s tagless-clone `HEAD` matches the published `COMMIT` asset. The tag push
-   triggers `release.yml` (builds **4 binaries** — Linux musl, macOS arm64 + x86_64, Windows `.exe` —
+   triggers `release.yml` (builds **5 binaries** — Linux musl arm64 + x86_64, macOS arm64 + x86_64, Windows `.exe` —
    plus `SHA256SUMS` + `COMMIT`, `--generate-notes`).
 5. **Set the release body FROM the CHANGELOG section** (single source of truth, so the notes can't
    drift from the changelog): extract this tag's `## [X.Y.Z]` block, drop the trailing `→ [docs]`
@@ -207,7 +207,7 @@ assignment for every scalar `Config` field — keep its key list in lockstep wit
    `**Full changelog:** <repo>/compare/vPREV...vX.Y.Z` line, then
    `gh release edit vX.Y.Z --notes-file <f>`. Extract with e.g.
    `awk '/^## \[X.Y.Z\]/{f=1;next} f&&/^## \[/{exit} f' CHANGELOG.md`.
-6. **Verify**: `gh release view vX.Y.Z` shows **6 assets** (4 binaries + `SHA256SUMS` + `COMMIT`),
+6. **Verify**: `gh release view vX.Y.Z` shows **7 assets** (5 binaries + `SHA256SUMS` + `COMMIT`),
    not draft/prerelease.
 
 **Install gate (current, since PR #50):** the prebuilt binary is used by **declared version match**,

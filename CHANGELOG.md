@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-09-04
+
+### Fixed
+
+- Restored the Linux ARM64 (`aarch64-unknown-linux-musl`) prebuilt release asset.
+
 ## [1.21.0] - 2026-09-04
 
 ### Added

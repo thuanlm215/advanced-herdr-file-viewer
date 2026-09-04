@@ -31,8 +31,8 @@ winget install BurntSushi.ripgrep.MSVC
 ```
 
 > **No Rust toolchain needed when a prebuilt exists.** `herdr plugin install thuanlm215/advanced-herdr-file-viewer`
-> downloads a prebuilt, SHA-256-verified binary for your platform (macOS arm64/x86_64, Linux x86_64,
-> Windows x86_64 preview).
+> downloads a prebuilt, SHA-256-verified binary for your platform (macOS arm64/x86_64, Linux
+> arm64/x86_64, Windows x86_64 preview).
 > The prebuilt is matched by **version**, so you get it even when `main` is ahead of the latest tag.
 > You'll receive the most recent released binary (a note tells you when newer, unreleased changes
 > aren't in it yet). It builds from source with `cargo` (Rust 1.96+) only when there's no matching
