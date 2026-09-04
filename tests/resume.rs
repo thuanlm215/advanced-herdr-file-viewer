@@ -44,13 +44,33 @@ impl HerdrCli for FakeHerdr {
                 Err(io::Error::other("host unavailable"))
             }
             ["pane", "process-info", "--pane", _] => {
-                let processes = if self.idle {
-                    serde_json::json!([])
+                let process_info = if self.idle {
+                    // Exact idle-shell shape observed from Herdr 0.8.2: the shell remains the
+                    // sole foreground process after session restore and must still be resumable.
+                    serde_json::json!({
+                        "foreground_process_group_id": 4242,
+                        "foreground_processes": [{
+                            "argv": ["/bin/bash"],
+                            "name": "bash",
+                            "pid": 4242
+                        }],
+                        "shell_pid": 4242
+                    })
                 } else {
-                    serde_json::json!([{ "name": "advanced-herdr-file-viewer" }])
+                    serde_json::json!({
+                        // A directly launched plugin process is itself Herdr's `shell_pid`; its
+                        // executable identity must keep it from looking like an idle shell.
+                        "foreground_process_group_id": 4242,
+                        "foreground_processes": [{
+                            "argv": ["./target/release/advanced-herdr-file-viewer"],
+                            "name": "advanced-herdr-file-viewer",
+                            "pid": 4242
+                        }],
+                        "shell_pid": 4242
+                    })
                 };
                 Ok(serde_json::json!({
-                    "result": { "process_info": { "foreground_processes": processes } }
+                    "result": { "process_info": process_info }
                 })
                 .to_string())
             }
@@ -88,7 +108,7 @@ fn pane_list(ids: &[&str]) -> String {
 }
 
 #[test]
-fn idle_restored_pane_is_relaunched_in_place_once() {
+fn restored_pane_with_only_its_shell_in_foreground_is_relaunched_in_place_once() {
     let temp = TempDir::new();
     let registration = arm(temp.path(), "/sessions/default.sock", "w1:p2");
     let record_path = registration.path().to_path_buf();

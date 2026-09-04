@@ -7,10 +7,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-## [1.21.0] - 2026-09-03
+## [1.21.0] - 2026-09-04
 
 ### Added
 - Files panes now start a fresh viewer in the same restored pane after a full herdr server restart. Normal close disarms the restart record; UI state is never persisted. → [summoning](docs/summoning.md) · [usage](docs/usage.md#after-a-herdr-server-restart)
+
+### Fixed
+
+- Resume viewers from restored Herdr 0.8.2 panes whose idle shell is reported as the sole foreground process.
 
 ## [1.20.0] - 2026-08-01
 
