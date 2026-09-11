@@ -514,45 +514,78 @@ fn tree_icon(node: &Node, mode: crate::config::TreeIcons) -> (&'static str, Opti
             TreeIcons::Unicode => ("▸ ▣ ", Some(Color::LightBlue)),
             TreeIcons::Nerd if node.expanded => ("▾  ", Some(Color::LightBlue)),
             TreeIcons::Nerd => ("▸  ", Some(Color::LightBlue)),
+            TreeIcons::Emoji if node.expanded => ("▾ 📂 ", Some(Color::LightBlue)),
+            TreeIcons::Emoji => ("▸ 📁 ", Some(Color::LightBlue)),
             TreeIcons::Off => unreachable!(),
         };
     }
     file_icon(&node.path, mode)
 }
 
-/// File glyph shared by tree rows and finder results, so `file_icons` has one visual vocabulary
-/// everywhere a file path is listed.
-fn file_icon(
-    path: &std::path::Path,
-    mode: crate::config::TreeIcons,
-) -> (&'static str, Option<Color>) {
-    use crate::config::TreeIcons;
-    if mode == TreeIcons::Off {
-        return ("", None);
-    }
-    let name = path
+/// File-type bucket shared by the portable Unicode and emoji palettes so both stay in lockstep.
+#[derive(Clone, Copy)]
+enum FileGlyphKind {
+    Jenkins,
+    Docker,
+    Helm,
+    GithubWorkflow,
+    Kubernetes,
+    Yaml,
+    Tf,
+    Tfvars,
+    Rs,
+    Md,
+    Json,
+    Config,
+    Js,
+    Ts,
+    Py,
+    Shell,
+    Web,
+    Image,
+    Archive,
+    Other,
+}
+
+fn file_glyph_kind(path: &std::path::Path) -> FileGlyphKind {
+    let name_lower = path
         .file_name()
         .and_then(|name| name.to_str())
-        .unwrap_or("");
-    let name_lower = name.to_ascii_lowercase();
+        .unwrap_or("")
+        .to_ascii_lowercase();
     let ext = path
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    // Standard Unicode approximations of common DevOps Nerd Font glyphs. Keep these to
-    // single-cell, text-font characters: Windows Terminal + Cascadia Mono renders them reliably
-    // and ratatui keeps every tree/search row aligned without a bundled font.
     let path_lower = path
         .to_string_lossy()
         .replace('\\', "/")
         .to_ascii_lowercase();
     let is_yaml = matches!(ext.as_str(), "yaml" | "yml");
     let in_dir = |dir: &str| path_lower.starts_with(dir) || path_lower.contains(&format!("/{dir}"));
-    let is_github_workflow = in_dir(".github/workflows/");
-    let is_helm_chart = matches!(name_lower.as_str(), "chart.yaml" | "chart.yml")
-        || (is_yaml && in_dir("templates/"));
-    let is_kubernetes_manifest = is_yaml
+    if name_lower == "jenkinsfile"
+        || name_lower.starts_with("jenkinsfile.")
+        || name_lower.ends_with(".jenkinsfile")
+    {
+        return FileGlyphKind::Jenkins;
+    }
+    if name_lower == "dockerfile"
+        || name_lower.starts_with("dockerfile.")
+        || name_lower.starts_with("docker-compose")
+        || name_lower.starts_with("compose.")
+    {
+        return FileGlyphKind::Docker;
+    }
+    if matches!(name_lower.as_str(), "chart.yaml" | "chart.yml")
+        || (is_yaml && in_dir("templates/"))
+    {
+        return FileGlyphKind::Helm;
+    }
+    if in_dir(".github/workflows/") {
+        return FileGlyphKind::GithubWorkflow;
+    }
+    if is_yaml
         && (in_dir("k8s/")
             || in_dir("kubernetes/")
             || in_dir("manifests/")
@@ -571,60 +604,111 @@ fn file_icon(
                     | "statefulset"
                     | "namespace"
                     | "kustomization"
-            ));
+            ))
+    {
+        return FileGlyphKind::Kubernetes;
+    }
+    match ext.as_str() {
+        "yaml" | "yml" => FileGlyphKind::Yaml,
+        "tf" | "hcl" => FileGlyphKind::Tf,
+        "tfvars" => FileGlyphKind::Tfvars,
+        "rs" => FileGlyphKind::Rs,
+        "md" | "mdx" => FileGlyphKind::Md,
+        "json" => FileGlyphKind::Json,
+        "toml" | "ini" | "conf" | "cfg" => FileGlyphKind::Config,
+        "js" | "jsx" => FileGlyphKind::Js,
+        "ts" | "tsx" => FileGlyphKind::Ts,
+        "py" => FileGlyphKind::Py,
+        "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat" | "cmd" => FileGlyphKind::Shell,
+        "html" | "htm" | "css" | "scss" | "sass" | "less" => FileGlyphKind::Web,
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "ico" => FileGlyphKind::Image,
+        "zip" | "gz" | "tgz" | "bz2" | "xz" | "7z" | "rar" | "tar" => FileGlyphKind::Archive,
+        _ => FileGlyphKind::Other,
+    }
+}
+
+/// File glyph shared by tree rows and finder results, so `file_icons` has one visual vocabulary
+/// everywhere a file path is listed.
+fn file_icon(
+    path: &std::path::Path,
+    mode: crate::config::TreeIcons,
+) -> (&'static str, Option<Color>) {
+    use crate::config::TreeIcons;
     match mode {
-        TreeIcons::Unicode
-            if name_lower == "jenkinsfile"
-                || name_lower.starts_with("jenkinsfile.")
-                || name_lower.ends_with(".jenkinsfile") =>
-        {
-            ("⚙ ", Some(Color::LightRed))
-        }
-        TreeIcons::Unicode
-            if name_lower == "dockerfile"
-                || name_lower.starts_with("dockerfile.")
-                || name_lower.starts_with("docker-compose")
-                || name_lower.starts_with("compose.") =>
-        {
-            ("▰ ", Some(Color::LightCyan))
-        }
-        TreeIcons::Unicode if is_helm_chart => ("⎈ ", Some(Color::LightCyan)),
-        TreeIcons::Unicode if is_github_workflow => ("↻ ", Some(Color::LightBlue)),
-        TreeIcons::Unicode if is_kubernetes_manifest => ("☸ ", Some(Color::LightBlue)),
-        TreeIcons::Unicode => match ext.as_str() {
-            "yaml" | "yml" => ("≋ ", Some(Color::Yellow)),
-            "tf" | "hcl" => ("△ ", Some(Color::LightMagenta)),
-            "tfvars" => ("◇ ", Some(Color::LightMagenta)),
-            "rs" => ("◆ ", Some(Color::LightRed)),
-            "md" | "mdx" => ("≡ ", Some(Color::LightBlue)),
-            "json" => ("▦ ", Some(Color::Yellow)),
-            "toml" | "ini" | "conf" | "cfg" => ("⚙ ", Some(Color::Yellow)),
-            "js" | "jsx" => ("■ ", Some(Color::Yellow)),
-            "ts" | "tsx" => ("■ ", Some(Color::LightBlue)),
-            "py" => ("● ", Some(Color::Yellow)),
-            "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat" | "cmd" => {
-                ("❯ ", Some(Color::LightGreen))
-            }
-            "html" | "htm" | "css" | "scss" | "sass" | "less" => ("◆ ", Some(Color::LightMagenta)),
-            "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "ico" => {
-                ("▧ ", Some(Color::LightMagenta))
-            }
-            "zip" | "gz" | "tgz" | "bz2" | "xz" | "7z" | "rar" | "tar" => {
-                ("▤ ", Some(Color::LightRed))
-            }
-            _ => ("· ", Some(Color::DarkGray)),
+        TreeIcons::Off => ("", None),
+        // Standard Unicode approximations of common DevOps Nerd Font glyphs. Keep these to
+        // single-cell, text-font characters: Windows Terminal + Cascadia Mono renders them reliably
+        // and ratatui keeps every tree/search row aligned without a bundled font.
+        TreeIcons::Unicode => match file_glyph_kind(path) {
+            FileGlyphKind::Jenkins => ("⚙ ", Some(Color::LightRed)),
+            FileGlyphKind::Docker => ("▰ ", Some(Color::LightCyan)),
+            FileGlyphKind::Helm => ("⎈ ", Some(Color::LightCyan)),
+            FileGlyphKind::GithubWorkflow => ("↻ ", Some(Color::LightBlue)),
+            FileGlyphKind::Kubernetes => ("☸ ", Some(Color::LightBlue)),
+            FileGlyphKind::Yaml => ("≋ ", Some(Color::Yellow)),
+            FileGlyphKind::Tf => ("△ ", Some(Color::LightMagenta)),
+            FileGlyphKind::Tfvars => ("◇ ", Some(Color::LightMagenta)),
+            FileGlyphKind::Rs => ("◆ ", Some(Color::LightRed)),
+            FileGlyphKind::Md => ("≡ ", Some(Color::LightBlue)),
+            FileGlyphKind::Json => ("▦ ", Some(Color::Yellow)),
+            FileGlyphKind::Config => ("⚙ ", Some(Color::Yellow)),
+            FileGlyphKind::Js => ("■ ", Some(Color::Yellow)),
+            FileGlyphKind::Ts => ("■ ", Some(Color::LightBlue)),
+            FileGlyphKind::Py => ("● ", Some(Color::Yellow)),
+            FileGlyphKind::Shell => ("❯ ", Some(Color::LightGreen)),
+            FileGlyphKind::Web => ("◆ ", Some(Color::LightMagenta)),
+            FileGlyphKind::Image => ("▧ ", Some(Color::LightMagenta)),
+            FileGlyphKind::Archive => ("▤ ", Some(Color::LightRed)),
+            FileGlyphKind::Other => ("· ", Some(Color::DarkGray)),
         },
-        TreeIcons::Nerd => match (name, ext.as_str()) {
-            (_, "rs") => (" ", Some(Color::LightRed)),
-            (_, "md" | "mdx") => (" ", Some(Color::LightBlue)),
-            (_, "json") => (" ", Some(Color::Yellow)),
-            (_, "toml") => (" ", Some(Color::Yellow)),
-            (_, "yaml" | "yml") => (" ", Some(Color::Yellow)),
-            (".gitignore" | ".gitattributes" | ".gitmodules", _) => (" ", Some(Color::LightRed)),
-            ("Cargo.lock" | "Cargo.toml", _) => (" ", Some(Color::LightRed)),
-            _ => (" ", Some(Color::Gray)),
+        // Color-emoji fallback: two-cell pictographs plus a trailing space. Most GUI terminals
+        // draw these without a Nerd Font; they are wider than `unicode` and still need an emoji
+        // font, so they are not the portable default.
+        TreeIcons::Emoji => match file_glyph_kind(path) {
+            FileGlyphKind::Jenkins => ("🔧 ", Some(Color::LightRed)),
+            FileGlyphKind::Docker => ("🐳 ", Some(Color::LightCyan)),
+            FileGlyphKind::Helm => ("🧭 ", Some(Color::LightCyan)),
+            FileGlyphKind::GithubWorkflow => ("🔄 ", Some(Color::LightBlue)),
+            FileGlyphKind::Kubernetes => ("🚢 ", Some(Color::LightBlue)),
+            FileGlyphKind::Yaml => ("📑 ", Some(Color::Yellow)),
+            FileGlyphKind::Tf => ("🧱 ", Some(Color::LightMagenta)),
+            FileGlyphKind::Tfvars => ("🔶 ", Some(Color::LightMagenta)),
+            FileGlyphKind::Rs => ("🦀 ", Some(Color::LightRed)),
+            FileGlyphKind::Md => ("📝 ", Some(Color::LightBlue)),
+            FileGlyphKind::Json => ("📋 ", Some(Color::Yellow)),
+            FileGlyphKind::Config => ("🔧 ", Some(Color::Yellow)),
+            FileGlyphKind::Js => ("📒 ", Some(Color::Yellow)),
+            FileGlyphKind::Ts => ("📘 ", Some(Color::LightBlue)),
+            FileGlyphKind::Py => ("🐍 ", Some(Color::Yellow)),
+            FileGlyphKind::Shell => ("💻 ", Some(Color::LightGreen)),
+            FileGlyphKind::Web => ("🎨 ", Some(Color::LightMagenta)),
+            FileGlyphKind::Image => ("📷 ", Some(Color::LightMagenta)),
+            FileGlyphKind::Archive => ("📦 ", Some(Color::LightRed)),
+            FileGlyphKind::Other => ("📄 ", Some(Color::DarkGray)),
         },
-        TreeIcons::Off => unreachable!(),
+        TreeIcons::Nerd => {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("");
+            let ext = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            match (name, ext.as_str()) {
+                (_, "rs") => (" ", Some(Color::LightRed)),
+                (_, "md" | "mdx") => (" ", Some(Color::LightBlue)),
+                (_, "json") => (" ", Some(Color::Yellow)),
+                (_, "toml") => (" ", Some(Color::Yellow)),
+                (_, "yaml" | "yml") => (" ", Some(Color::Yellow)),
+                (".gitignore" | ".gitattributes" | ".gitmodules", _) => {
+                    (" ", Some(Color::LightRed))
+                }
+                ("Cargo.lock" | "Cargo.toml", _) => (" ", Some(Color::LightRed)),
+                _ => (" ", Some(Color::Gray)),
+            }
+        }
     }
 }
 
@@ -3314,6 +3398,60 @@ fn draw_context_menu_overlay(frame: &mut Frame, area: Rect, menu: &ContextMenuVi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn emoji_file_glyphs_are_two_cells_plus_a_trailing_space() {
+        use crate::config::TreeIcons;
+        let paths = [
+            "Jenkinsfile",
+            "Dockerfile",
+            "charts/app/Chart.yaml",
+            ".github/workflows/ci.yml",
+            "k8s/deployment.yaml",
+            "pipeline.yaml",
+            "main.tf",
+            "variables.tfvars",
+            "main.rs",
+            "README.md",
+            "package.json",
+            "Cargo.toml",
+            "app.js",
+            "app.ts",
+            "app.py",
+            "deploy.sh",
+            "index.html",
+            "logo.png",
+            "dist.tar.gz",
+            "unknown.bin",
+        ];
+        for path in paths {
+            let (glyph, _) = file_icon(Path::new(path), TreeIcons::Emoji);
+            assert_eq!(
+                Span::raw(glyph).width(),
+                3,
+                "{path} emoji glyph must be two cells plus a space, got {glyph:?} width {}",
+                Span::raw(glyph).width()
+            );
+        }
+        let dir = Node {
+            path: Path::new("src").to_path_buf(),
+            kind: NodeKind::Dir,
+            depth: 0,
+            expanded: true,
+            status: None,
+            dir_dirty: false,
+        };
+        let (open, _) = tree_icon(&dir, TreeIcons::Emoji);
+        assert_eq!(Span::raw(open).width(), 5, "expanded folder {open:?}");
+        let mut closed = dir;
+        closed.expanded = false;
+        let (closed_glyph, _) = tree_icon(&closed, TreeIcons::Emoji);
+        assert_eq!(
+            Span::raw(closed_glyph).width(),
+            5,
+            "collapsed folder {closed_glyph:?}"
+        );
+    }
 
     #[test]
     fn context_menu_rect_reserves_rows_for_every_action_and_padding() {

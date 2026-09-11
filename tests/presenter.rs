@@ -182,6 +182,9 @@ fn tree_icon_modes_render_portable_nerd_and_off_variants() {
 
     state.tree_icons = herdr_file_viewer::config::TreeIcons::Off;
     assert!(render(&state, 100, 24).contains("▾ src"));
+
+    state.tree_icons = herdr_file_viewer::config::TreeIcons::Emoji;
+    assert!(render(&state, 100, 24).contains("▾ 📂 src"));
 }
 
 #[test]
@@ -217,6 +220,45 @@ fn unicode_icons_distinguish_common_devops_and_shell_files_without_a_nerd_font()
     assert!(out.contains("△ main.tf"), "{out}");
     assert!(out.contains("◇ variables.tfvars"), "{out}");
     assert!(out.contains("❯ deploy.sh"), "{out}");
+}
+
+#[test]
+fn emoji_icons_distinguish_common_devops_and_shell_files_without_a_nerd_font() {
+    let mut state = sample_state();
+    state.notices = vec![];
+    state.tree_icons = herdr_file_viewer::config::TreeIcons::Emoji;
+    state.nodes = [
+        "test.Jenkinsfile",
+        "Dockerfile",
+        "docker-compose.yml",
+        ".github/workflows/ci.yml",
+        "k8s/deployment.yaml",
+        "charts/app/Chart.yaml",
+        "pipeline.yaml",
+        "main.tf",
+        "variables.tfvars",
+        "deploy.sh",
+        "main.rs",
+        "README.md",
+    ]
+    .into_iter()
+    .map(|name| node(&format!("/r/{name}"), NodeKind::File, 0, false, None))
+    .collect();
+    state.selected = 0;
+
+    let out = render(&state, 100, 24);
+    assert!(out.contains("🔧 test.Jenkinsfile"), "{out}");
+    assert!(out.contains("🐳 Dockerfile"), "{out}");
+    assert!(out.contains("🐳 docker-compose.yml"), "{out}");
+    assert!(out.contains("🔄 ci.yml"), "{out}");
+    assert!(out.contains("🚢 deployment.yaml"), "{out}");
+    assert!(out.contains("🧭 Chart.yaml"), "{out}");
+    assert!(out.contains("📑 pipeline.yaml"), "{out}");
+    assert!(out.contains("🧱 main.tf"), "{out}");
+    assert!(out.contains("🔶 variables.tfvars"), "{out}");
+    assert!(out.contains("💻 deploy.sh"), "{out}");
+    assert!(out.contains("🦀 main.rs"), "{out}");
+    assert!(out.contains("📝 README.md"), "{out}");
 }
 
 #[test]
@@ -2722,6 +2764,12 @@ fn finder_match_rows_follow_the_configured_file_icon_mode() {
     assert!(off.contains("main.rs  src"), "{off}");
     assert!(!off.contains("◆ main.rs"), "{off}");
     assert!(!off.contains(" main.rs"), "{off}");
+    assert!(!off.contains("🦀 main.rs"), "{off}");
+
+    state.tree_icons = herdr_file_viewer::config::TreeIcons::Emoji;
+    let emoji = render(&state, 100, 24);
+    assert!(emoji.contains("🦀 main.rs  src"), "{emoji}");
+    assert!(emoji.contains("📝 README.md"), "{emoji}");
 }
 
 fn workspace_search_state(count: usize) -> ViewState {
@@ -2788,6 +2836,11 @@ fn workspace_search_rows_reuse_the_configured_file_icons() {
     let off = render(&state, 100, 24);
     assert!(off.contains("usage.md  docs  1:3"), "{off}");
     assert!(!off.contains(" usage.md"), "{off}");
+    assert!(!off.contains("📝 usage.md"), "{off}");
+
+    state.tree_icons = herdr_file_viewer::config::TreeIcons::Emoji;
+    let emoji = render(&state, 100, 24);
+    assert!(emoji.contains("📝 usage.md  docs  1:3"), "{emoji}");
 
     state.tree_icons = herdr_file_viewer::config::TreeIcons::Unicode;
     state.workspace_search.as_mut().unwrap().matches[0].path = "README.md".to_string();

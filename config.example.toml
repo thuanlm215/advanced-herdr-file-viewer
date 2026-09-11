@@ -128,7 +128,8 @@
 #tree_position = "left"
 
 # File/folder icons in tree/search results: "unicode" (rich standard symbols,
-# including Jenkins/Docker/Actions/Kubernetes/Helm/YAML/Terraform/shell; works with Cascadia Mono), "nerd"
+# including Jenkins/Docker/Actions/Kubernetes/Helm/YAML/Terraform/shell; works with Cascadia Mono),
+# "emoji" (two-cell color emoji; no Nerd Font, still needs an emoji font), "nerd"
 # (colored VS Code-like glyphs; requires a Nerd Font), or "off". Default:
 #file_icons = "unicode"
 
