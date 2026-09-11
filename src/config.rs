@@ -176,6 +176,7 @@ pub enum TreeIcons {
     #[default]
     Unicode,
     Nerd,
+    Emoji,
 }
 
 impl TreeIcons {
@@ -184,6 +185,7 @@ impl TreeIcons {
             Self::Off => "off",
             Self::Unicode => "unicode",
             Self::Nerd => "nerd",
+            Self::Emoji => "emoji",
         }
     }
 }
@@ -251,7 +253,7 @@ pub struct Config {
     /// out-of-`u16` number clamps into range instead of tripping the parse; only a negative /
     /// non-integer value fails to parse and degrades the whole config to defaults.
     pub tree_max_cols: Option<u32>,
-    /// Tree icon style: `off`, `unicode`, or `nerd` (which requires a Nerd Font).
+    /// Tree icon style: `off`, `unicode`, `emoji`, or `nerd` (which requires a Nerd Font).
     pub file_icons: Option<String>,
     /// The **content preview line cap**: past this many lines a file (or a large diff) is shown as a
     /// truncated preview plus a notice, not whole (AC-13). `None` falls back to
@@ -528,6 +530,7 @@ pub fn resolve(config: &Config, get_env: impl Fn(&str) -> Option<String>) -> Eff
     {
         Some("off") => TreeIcons::Off,
         Some("nerd") => TreeIcons::Nerd,
+        Some("emoji") => TreeIcons::Emoji,
         _ => TreeIcons::Unicode,
     };
 
@@ -1338,6 +1341,7 @@ mod tests {
             ("off", TreeIcons::Off),
             (" Unicode ", TreeIcons::Unicode),
             ("NERD", TreeIcons::Nerd),
+            (" Emoji ", TreeIcons::Emoji),
             ("unknown", TreeIcons::Unicode),
         ] {
             let cfg = Config {

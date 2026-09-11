@@ -67,7 +67,7 @@ viewer_pane_ratio = 0.2      # viewer share for a one-pane workspace/tab; 0.5 me
 tree_width = 30             # tree column's share of the viewer pane, percent 20-80 (content takes the rest)
 tree_max_cols = 30          # HARD CAP in columns; the SMALLER of this and tree_width% wins (raise both to widen)
 tree_position = "left"      # which side the directory tree sits on: "left" (default) or "right"
-file_icons = "unicode"      # "unicode" (default), "nerd" (Nerd Font required), or "off"
+file_icons = "unicode"      # "unicode" (default), "emoji", "nerd" (Nerd Font required), or "off"
 
 preview_max_lines = 10000   # show at most this many lines before a truncated preview (100–100000)
 preview_max_kib = 1024      # ...or this size before truncating, in KiB (1024 = 1 MB; 64–65536)
@@ -100,8 +100,12 @@ by dragging the divider, and an explicit resize lifts the cap.
 results. `unicode` is the portable default: it uses colored, standard Unicode symbols that work with
 common fonts such as Cascadia Mono, with distinct DevOps cues for Jenkinsfile, Docker/Compose,
 GitHub Actions workflows, Kubernetes manifests, Helm charts, YAML, Terraform (`.tf` / `.tfvars`),
-and shell scripts, as well as Rust, Markdown, JSON, web files, images, and archives. `nerd` uses colored Devicon-style
-glyphs and requires a Nerd Font in the terminal; `off` restores compact text-only rows.
+and shell scripts, as well as Rust, Markdown, JSON, web files, images, and archives. `emoji` uses
+the same file-type map with two-cell color emoji (folders, crab, whale, snake, and so on): most GUI
+terminals draw these via a color-emoji fallback font, so they do not need a Nerd Font, but they are
+wider than `unicode` and still fail on a Linux console or a terminal without an emoji font. `nerd`
+uses colored Devicon-style glyphs and requires a Nerd Font in the terminal; `off` restores compact
+text-only rows.
 
 `preview_max_lines` and `preview_max_kib` cap how much of a file the content pane shows: a file is
 displayed in full until it exceeds **either** cap, then the pane shows a truncated preview with a

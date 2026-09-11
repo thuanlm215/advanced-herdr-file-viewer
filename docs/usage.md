@@ -112,7 +112,7 @@ viewer with `HERDR_FILE_VIEWER_OPEN` (no fuzzy-finder key-scripting). You get a 
 file, content loaded, viewport on the line. If the pane is too narrow to show the content column
 (tree-only layout), the viewer **zooms** the file automatically — same as confirming the fuzzy
 finder in a narrow split. Finder result rows use the configured `file_icons` style, matching the
-tree (`unicode`, `nerd`, or `off`).
+tree (`unicode`, `emoji`, `nerd`, or `off`).
 
 ### Teach your agent
 

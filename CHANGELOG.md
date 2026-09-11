@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-09-11
+
+### Added
+- `file_icons = "emoji"` draws two-cell color-emoji file/folder cues (same type map as `unicode`) without a Nerd Font. → [configuration](docs/configuration.md)
+
 ## [1.21.1] - 2026-09-04
 
 ### Fixed
