@@ -15,7 +15,7 @@ All notable changes to this project are documented here. The format is based on
 ### Fixed
 - Image preview encodes a capped PNG off the UI thread (no RGBA-on-main-thread freeze when opening or expanding a pane, especially Ghostty over SSH); split-drags coalesce to one encode.
 - ImageView uses the same root/FIFO/regular-file gate as other content (AC-N5), caps decode (20 MB / 8k px / 64 MiB alloc / renderer timeout), and skips pixel decode when `image_protocol = "off"`.
-- `image_protocol = "auto"` skips the stdio capability query (and its raw-mode dance) when the environment already looks like Kitty, Ghostty, or herdr (`HERDR_ENV`), so `q` still works in a pane/pty and SSH startup is not delayed by a silent probe. WezTerm is not treated as Kitty.
+- `image_protocol = "auto"` does not run the stdio capability query (it would disable ratatui raw mode and swallow keys on a pty). Kitty/Ghostty/herdr (`HERDR_ENV`) select Kitty from the environment; WezTerm is not treated as Kitty.
 - Image captions are escape-sanitized; graphics are not painted under modal overlays and are cleared when the pane size changes.
 - Git-changed / untracked images open as a preview instead of a binary diff. `v` still cycles to the diff.
 

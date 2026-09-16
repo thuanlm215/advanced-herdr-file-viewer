@@ -215,8 +215,8 @@ pub fn run(
     ));
 
     let mut terminal = ratatui::try_init()?;
-    // Query capabilities after alternate-screen init (ratatui-image contract). Off skips the
-    // picker so ImageView never decodes pixels.
+    // Graphics picker after alternate-screen init. Off skips the picker so ImageView never
+    // decodes pixels. Protocol is chosen from config + env (no stdio capability query).
     if let Some(picker) = crate::image_preview::init_picker(eff.image_protocol) {
         controller.set_image_picker(picker);
     }

@@ -188,7 +188,7 @@ non-image file shows its **diff**, a markdown file **renders**, and anything els
 
 - **Image preview**: selecting an image (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`, `.ico`,
   `.tiff`, `.tif`) renders it inline in the content pane using the Kitty graphics protocol on
-  terminals the startup probe (or a Kitty/Ghostty env hint) reports, or Unicode 24-bit halfblocks
+  Kitty, Ghostty, or herdr (from the environment), or Unicode 24-bit halfblocks
   with image dimensions (`{width} × {height} px`) and file size. The image is fitted and centered
   in the pane. Graphics are cleared when navigating away, the pane size settles after a resize, a
   modal overlay opens over the image, or an editor is launched. `image_protocol = "off"` shows

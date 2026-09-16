@@ -152,28 +152,19 @@ pub fn init_picker(configured: ImageProtocol) -> Option<Picker> {
     if matches!(configured, ImageProtocol::Off) {
         return None;
     }
-    // Skip the stdio capability query when env already says Kitty/Ghostty/herdr.
-    // `Picker::from_query_stdio` enable/disable-raw-modes on a helper thread, which can
-    // leave ratatui's already-raw stdin cooked — `q` then never arrives on a pty (cli_smoke,
-    // herdr panes). The probe is also silent over SSH, so it added delay for no gain.
-    let skip_stdio_query = matches!(configured, ImageProtocol::Kitty)
-        || (matches!(configured, ImageProtocol::Auto)
-            && prefer_kitty_from_env(|k| std::env::var(k).ok()));
-    let mut picker = if skip_stdio_query {
-        Picker::halfblocks()
-    } else {
-        Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks())
-    };
+    // Never call `Picker::from_query_stdio` after ratatui has taken the terminal: its helper
+    // thread enable/disable-raw-modes and can leave stdin cooked, so `q`/`a` never arrive on
+    // a pty (cli_smoke, e2e_annotations) or a herdr pane. The probe is also silent over SSH.
+    // Protocol comes from config + env; font size is the crate default (10×20).
+    let mut picker = Picker::halfblocks();
     match configured {
         ImageProtocol::Kitty => picker.set_protocol_type(ProtocolType::Kitty),
         ImageProtocol::Sixel => picker.set_protocol_type(ProtocolType::Sixel),
-        ImageProtocol::Halfblocks => picker.set_protocol_type(ProtocolType::Halfblocks),
-        ImageProtocol::Auto => match picker.protocol_type() {
-            ProtocolType::Halfblocks if prefer_kitty_from_env(|k| std::env::var(k).ok()) => {
-                picker.set_protocol_type(ProtocolType::Kitty);
-            }
-            _ => {}
-        },
+        ImageProtocol::Halfblocks => {}
+        ImageProtocol::Auto if prefer_kitty_from_env(|k| std::env::var(k).ok()) => {
+            picker.set_protocol_type(ProtocolType::Kitty);
+        }
+        ImageProtocol::Auto => {}
         _ => {}
     }
     Some(picker)

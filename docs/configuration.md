@@ -123,12 +123,12 @@ but not how much of a very large *diff* is (a diff past that bound is shown up t
 
 `image_protocol` sets the graphics protocol used to render image files (`.png`, `.jpg`, `.jpeg`,
 `.gif`, `.webp`, `.bmp`, `.ico`, `.tiff`, `.tif`) in the content pane. `"auto"` (the default)
-probes the terminal after TUI init. If the probe is silent — typical inside a herdr pane over
-SSH — it falls back to Kitty when the environment looks like Kitty, Ghostty, or **herdr**
-(`KITTY_WINDOW_ID`, `GHOSTTY_*`, `TERM`/`TERM_PROGRAM` containing `kitty`/`ghostty`, or
-`HERDR_ENV`). Unicode halfblocks in a GPU terminal look like a mosaic, so herdr panes prefer
-Kitty; set `"halfblocks"` explicitly on a dumb tty. WezTerm is not treated as Kitty (its
-placeholders are unimplemented). Set `"kitty"` to force Kitty, `"sixel"` for sixel,
+picks Kitty when the environment looks like Kitty, Ghostty, or **herdr** (`KITTY_WINDOW_ID`,
+`GHOSTTY_*`, `TERM`/`TERM_PROGRAM` containing `kitty`/`ghostty`, or `HERDR_ENV`), otherwise
+Unicode halfblocks. There is no stdio capability probe (it is silent over SSH and would
+disturb raw-mode input). Unicode halfblocks in a GPU terminal look like a mosaic, so herdr
+panes prefer Kitty; set `"halfblocks"` explicitly on a dumb tty. WezTerm is not treated as
+Kitty (its placeholders are unimplemented). Set `"kitty"` to force Kitty, `"sixel"` for sixel,
 `"halfblocks"` for text cells, or `"off"` to skip pixel decode and show only
 `{width} × {height} px` plus file size.
 
