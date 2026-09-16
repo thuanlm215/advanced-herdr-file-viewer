@@ -151,6 +151,12 @@
 # From 64 to 65536 (64 MB). Default:
 #preview_max_kib = 1024
 
+# image_protocol: graphics protocol for inline image preview: "auto" (default,
+# probes the terminal; Kitty/Ghostty/herdr env fallback — not WezTerm),
+# "kitty", "sixel", "halfblocks", or "off" (dimensions/size only, no pixel decode).
+# Files larger than 20 MB are refused. Default:
+#image_protocol = "auto"
+
 # --- Keybindings -------------------------------------------------------------
 #
 # Remap any global key. Key each entry by its INTENT NAME: the stable snake_case

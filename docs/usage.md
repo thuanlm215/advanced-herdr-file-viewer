@@ -181,12 +181,21 @@ the original process remains alive, and a successful live handoff is detected an
 
 ## Viewing a file
 
-The content pane shows **the right view for each file, automatically**: a changed file shows its
-**diff**, a markdown file **renders**, anything else is **syntax-highlighted** content with line
-numbers. No mode-switching, no commands.
+The content pane shows **the right view for each file, automatically**: an image file displays an
+**inline image preview** (even when git-changed — a binary diff is not useful), a changed
+non-image file shows its **diff**, a markdown file **renders**, and anything else is
+**syntax-highlighted** content with line numbers. No mode-switching, no commands.
 
+- **Image preview**: selecting an image (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`, `.ico`,
+  `.tiff`, `.tif`) renders it inline in the content pane using the Kitty graphics protocol on
+  Kitty, Ghostty, or herdr (from the environment), or Unicode 24-bit halfblocks
+  with image dimensions (`{width} × {height} px`) and file size. The image is fitted and centered
+  in the pane. Graphics are cleared when navigating away, the pane size settles after a resize, a
+  modal overlay opens over the image, or an editor is launched. `image_protocol = "off"` shows
+  only that dimension caption.
 - **Cycle the view** with `v` to override the automatic choice (e.g. see a changed markdown file's
-  raw source instead of its diff).
+  raw source instead of its diff). On a changed image, `v` steps to the git binary-diff, then the
+  syntax placeholder.
 - A changed file can also show a **full-file diff**: the whole file with line numbers and the diff
   shown inline.
 - **Scroll** the content in all four directions once it's focused (`Tab` to it, then the arrows or
@@ -201,9 +210,9 @@ numbers. No mode-switching, no commands.
   the whole terminal — the file takes over the entire screen, not just the split. `Z` again (or
   `Esc`/`q`/`z`) returns to the split.
 
-Rendering is **delegated** to `glow` (markdown), `delta` (diffs), and `bat` (syntax); when a
-renderer isn't installed the viewer falls back to plain text with a short notice. See
-[external renderers](renderers.md).
+External rendering is **delegated** to `glow` (markdown), `delta` (diffs), and `bat` (syntax), while
+image preview is built-in natively; when an external renderer isn't installed the viewer falls back
+to plain text with a short notice. See [external renderers](renderers.md).
 
 ## Git awareness
 

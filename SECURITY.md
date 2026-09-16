@@ -11,12 +11,17 @@ collaborator handed you. Its security posture is built around that.
   external process, not an in-app edit.
 
 - **Untrusted file content → terminal-control neutralization.** All file bytes are treated as
-  hostile. Content is fed to the external renderers on **stdin** (never as a command argument, so
+  hostile. Text content is fed to the external renderers on **stdin** (never as a command argument, so
   a file name can't inject), and the result is run through an escape-sequence neutralizer before
   display: cursor-movement, screen-control, OSC, C1, and other control sequences are stripped;
   only SGR (color/style) is kept and mapped to ratatui styles. A malicious file therefore cannot
   move the cursor, clear the screen, set the window title, or otherwise drive the terminal; it
   can only paint text inside the viewer's own region.
+  **Images** are the one in-process decode: the path must canonicalize to a regular file inside
+  the tree root (AC-N5; FIFOs/devices/escaping symlinks are refused), the file is size-capped
+  (20 MB), decode is allocation- and time-bounded, and the only graphics escapes emitted are the
+  viewer's own Kitty PNG placement (or `ratatui-image` halfblocks/sixel). Captions still go
+  through the escape neutralizer. `image_protocol = "off"` skips pixel decode.
 
 - **Pane resume records → identity-scoped, content-free state.** A managed viewer writes one
   atomic, safe-to-delete record under `HERDR_PLUGIN_STATE_DIR`, containing only its herdr
@@ -28,10 +33,12 @@ collaborator handed you. Its security posture is built around that.
 - **Untrusted repository → hardened git invocations.** Because the opened repo may be hostile,
   every `git` command is hardened against repo-controlled code execution: `--no-ext-diff` /
   `--no-textconv` refuse repo-configured diff/textconv programs, `--attr-source` reads attributes
-  from the empty tree (so a planted `.gitattributes` can't designate a filter/diff driver),
-  `core.fsmonitor` and `core.hooksPath` are neutralized, `GIT_OPTIONAL_LOCKS=0` prevents index
-  writes, and repo-redirecting environment variables (`GIT_DIR`, `GIT_WORK_TREE`, …) are scrubbed.
-  This hardening lives in a single shared builder so it cannot drift between callers.
+  from the empty tree on git ≥ 2.40 (so a planted `.gitattributes` can't designate a filter/diff
+  driver; the flag is omitted on older git that treats it as a hard error — Apple Xcode git and
+  git 2.34/2.39), `core.fsmonitor` and `core.hooksPath` are neutralized, `GIT_OPTIONAL_LOCKS=0`
+  prevents index writes, and repo-redirecting environment variables (`GIT_DIR`, `GIT_WORK_TREE`,
+  …) are scrubbed. This hardening lives in a single shared builder so it cannot drift between
+  callers.
 
 - **Injection guards.** Host-supplied pane ids are validated before they reach an argv (so a
   flag-like id can't option-inject the herdr CLI). Paths are passed to `git` as raw `OsStr`

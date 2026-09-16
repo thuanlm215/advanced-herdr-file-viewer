@@ -16,6 +16,7 @@ pub mod help;
 pub mod herdr;
 pub mod highlight;
 pub mod host;
+pub mod image_preview;
 pub mod index;
 pub mod infile;
 pub mod input;

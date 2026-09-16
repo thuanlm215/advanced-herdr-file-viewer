@@ -8,8 +8,8 @@
 
 A git-aware, read-only file viewer for [herdr](https://herdr.dev). Fork of
 [smarzban/herdr-file-viewer](https://github.com/smarzban/herdr-file-viewer): the same tree +
-diff / markdown / syntax views, plus **workspace search**, **context actions that open Herdr
-workspaces and panes**, **file icons**, and **independent tree scrolling**.
+diff / markdown / syntax / **inline image preview** views, plus **workspace search**, **context
+actions that open Herdr workspaces and panes**, **file icons**, and **independent tree scrolling**.
 
 ![advanced-herdr-file-viewer open in a herdr split beside your work: the directory tree on the left, syntax-highlighted content on the right](assets/File-viewer.png)
 
@@ -23,8 +23,8 @@ workspaces and panes**, **file icons**, and **independent tree scrolling**.
 
 ## Why you'd want it
 
-- **The right view, automatically.** A changed file shows its diff; a README renders; code is
-  highlighted. Press `v` only when you want something else.
+- **The right view, automatically.** Images preview inline (Kitty/Ghostty); a changed file shows
+  its diff; a README renders; code is highlighted. Press `v` only when you want something else.
 - **Search the workspace, not just the open file.** `f` fuzzy-finds files; `F` searches text with
   ripgrep. `Tab` switches scope between the whole workspace and the selected folder.
 - **Act from the tree.** Right-click or `Space` for a numbered context menu. `s` opens a Herdr
@@ -34,8 +34,8 @@ workspaces and panes**, **file icons**, and **independent tree scrolling**.
   status mode (`d`), baseline toggle (`b`). Not a separate git client.
 - **Icons you can actually scan.** Unicode by default (Jenkins, Docker, YAML, Terraform, …);
   optional Nerd Font glyphs.
-- **Keyboard-first**, mouse-optional. Read-only; rendering is delegated to `glow` / `delta` /
-  `bat`. See [SECURITY.md](SECURITY.md).
+- **Keyboard-first**, mouse-optional. Read-only; text rendering is delegated to `glow` / `delta` /
+  `bat`; images use the Kitty graphics protocol (or Unicode halfblocks). See [SECURITY.md](SECURITY.md).
 
 ## Highlights
 

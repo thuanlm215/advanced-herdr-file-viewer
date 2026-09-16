@@ -41,7 +41,7 @@ config key and above the built-in default — `editor` (`$EDITOR`) and `update_c
 (`$HERDR_FILE_VIEWER_NO_UPDATE_CHECK`) — giving those two a `config > env > default` chain. Every
 other key (`markdown`, `diff`, `syntax`, `open`, `reveal`, `hide_dotfiles`, `confirm_discard`,
 `open_workspace_with_viewer`, `viewer_pane_ratio`, `scroll_lines`, `tree_width`, `tree_position`,
-`tree_max_cols`, `file_icons`, `preview_max_lines`, `preview_max_kib`) has no
+`tree_max_cols`, `file_icons`, `preview_max_lines`, `preview_max_kib`, `image_protocol`) has no
 applicable environment variable; for those it's `config > default` only.
 
 ## Keys
@@ -71,6 +71,7 @@ file_icons = "unicode"      # "unicode" (default), "emoji", "nerd" (Nerd Font re
 
 preview_max_lines = 10000   # show at most this many lines before a truncated preview (100–100000)
 preview_max_kib = 1024      # ...or this size before truncating, in KiB (1024 = 1 MB; 64–65536)
+image_protocol = "auto"     # "auto" (default), "kitty", "sixel", "halfblocks", or "off"
 ```
 
 `open_workspace_with_viewer` controls only the viewer's **Open workspace here** action (`s` /
@@ -119,6 +120,23 @@ either to view bigger files (`preview_max_lines` up to `100000`, `preview_max_ki
 One caveat for **diffs**: a diff is additionally bounded at ~4 MB by the git-capture step, independent
 of `preview_max_kib`. So raising `preview_max_kib` above ~4 MB widens how much *file content* is shown
 but not how much of a very large *diff* is (a diff past that bound is shown up to ~4 MB).
+
+`image_protocol` sets the graphics protocol used to render image files (`.png`, `.jpg`, `.jpeg`,
+`.gif`, `.webp`, `.bmp`, `.ico`, `.tiff`, `.tif`) in the content pane. `"auto"` (the default)
+picks Kitty when the environment looks like Kitty, Ghostty, or **herdr** (`KITTY_WINDOW_ID`,
+`GHOSTTY_*`, `TERM`/`TERM_PROGRAM` containing `kitty`/`ghostty`, or `HERDR_ENV`), otherwise
+Unicode halfblocks. There is no stdio capability probe (it is silent over SSH and would
+disturb raw-mode input). Unicode halfblocks in a GPU terminal look like a mosaic, so herdr
+panes prefer Kitty; set `"halfblocks"` explicitly on a dumb tty. WezTerm is not treated as
+Kitty (its placeholders are unimplemented). Set `"kitty"` to force Kitty, `"sixel"` for sixel,
+`"halfblocks"` for text cells, or `"off"` to skip pixel decode and show only
+`{width} × {height} px` plus file size.
+
+Image files are still gated like other content: the path must canonicalize to a regular file
+inside the tree root (symlinks that escape, FIFOs, and devices are refused), decode runs under a
+wall-clock timeout and a pixel/allocation cap, and files larger than **20 MB** are not opened
+(this hard cap is independent of `preview_max_kib`, which bounds text reads).
+
 
 `confirm_discard` guards the one piece of state the viewer can lose. Annotations (`a` / `A`) are
 session-only, so both quitting (`q`) and switching worktree (`W`) discard them. By default either

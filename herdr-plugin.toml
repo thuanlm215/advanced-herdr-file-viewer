@@ -25,8 +25,8 @@
 
 id = "advanced-herdr-file-viewer"
 name = "advanced-herdr-file-viewer"
-version = "1.22.0"
-description = "A git-aware, read-only file viewer: a keyboard-driven TUI in a herdr split pane."
+version = "1.23.0"
+description = "A git-aware, read-only file viewer: tree, diffs, markdown, syntax, and inline image preview in a herdr split pane."
 min_herdr_version = "0.7.5"
 platforms = ["linux", "macos", "windows"]
 

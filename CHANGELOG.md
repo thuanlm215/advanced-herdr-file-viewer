@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-09-16
+
+### Added
+- Inline image preview in the content pane (Kitty graphics on Kitty/Ghostty/herdr; Unicode halfblocks otherwise): `.png`, `.jpg`/`.jpeg`, `.gif` (first frame), `.webp`, `.bmp`, `.ico`, `.tiff`/`.tif`. Fitted and centered; configurable `image_protocol`. → [configuration](docs/configuration.md) · [usage](docs/usage.md#viewing-a-file)
+
+### Fixed
+- Image preview encodes a capped PNG off the UI thread (no RGBA-on-main-thread freeze when opening or expanding a pane, especially Ghostty over SSH); split-drags coalesce to one encode.
+- ImageView uses the same root/FIFO/regular-file gate as other content (AC-N5), caps decode (20 MB / 8k px / 64 MiB alloc / renderer timeout), and skips pixel decode when `image_protocol = "off"`.
+- `image_protocol = "auto"` does not run the stdio capability query (it would disable ratatui raw mode and swallow keys on a pty). Kitty/Ghostty/herdr (`HERDR_ENV`) select Kitty from the environment; WezTerm is not treated as Kitty.
+- Image captions are escape-sanitized; graphics are not painted under modal overlays and are cleared when the pane size changes.
+- Git-changed / untracked images open as a preview instead of a binary diff. `v` still cycles to the diff.
+
 ## [1.22.0] - 2026-09-11
 
 ### Added
