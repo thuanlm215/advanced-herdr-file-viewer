@@ -111,6 +111,7 @@ fn sample_state() -> ViewState {
         content_selection: None,
         help: None,
         context_menu: None,
+        image: None,
     }
 }
 

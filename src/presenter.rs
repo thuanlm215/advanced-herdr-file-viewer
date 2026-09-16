@@ -175,6 +175,9 @@ pub struct ViewState {
     pub help: Option<HelpView>,
     /// When `Some`, the context menu popup overlay is drawn on top of everything else.
     pub context_menu: Option<ContextMenuView>,
+    /// When `Some`, an image widget is rendered in the content pane instead of text.
+    /// Encode happens off-thread; the Presenter only paints an already-encoded protocol.
+    pub image: Option<std::sync::Arc<std::sync::Mutex<crate::image_preview::Paint>>>,
 }
 
 /// The worktree picker's draw model (an owned snapshot of the controller's picker state, so
@@ -1354,6 +1357,17 @@ fn content_block(state: &ViewState) -> Block<'static> {
 
 /// Draw the right column: a notices strip (if any) above the content pane. Returns the
 /// content viewport `(width, height)` so the controller can clamp scrolling to it.
+fn image_hidden_by_overlay(state: &ViewState) -> bool {
+    state.picker.is_some()
+        || state.finder.is_some()
+        || state.workspace_search.is_some()
+        || state.annotation_overview.is_some()
+        || state.annotation_editor.is_some()
+        || state.discard_confirm.is_some()
+        || state.help.is_some()
+        || state.context_menu.is_some()
+}
+
 fn draw_content(frame: &mut Frame, area: Rect, state: &ViewState) -> (u16, u16) {
     // the title is derived from the DISPLAYED content's file (`content_title`), not the
     // live tree cursor, so it switches in lockstep with the body — the pane never shows a newly-
@@ -1424,6 +1438,48 @@ fn draw_content(frame: &mut Frame, area: Rect, state: &ViewState) -> (u16, u16) 
                 .map(|n| Line::styled(sanitize_control(n), Style::new().fg(Color::Yellow))),
         );
         frame.render_widget(Paragraph::new(notice_lines), notices_rect);
+    }
+
+    if !image_hidden_by_overlay(state)
+        && let Some(ref proto_lock) = state.image
+        && let Ok(mut proto) = proto_lock.lock()
+    {
+        let (img_area, info_area) = if content_area.height > 1 {
+            (
+                Rect {
+                    x: content_area.x,
+                    y: content_area.y,
+                    width: content_area.width,
+                    height: content_area.height.saturating_sub(1),
+                },
+                Some(Rect {
+                    x: content_area.x,
+                    y: content_area.y + content_area.height.saturating_sub(1),
+                    width: content_area.width,
+                    height: 1,
+                }),
+            )
+        } else {
+            (content_area, None)
+        };
+        proto.render(img_area, frame.buffer_mut());
+        if let Some(info_rect) = info_area {
+            let caption = state
+                .content
+                .lines
+                .first()
+                .map(|line| {
+                    line.spans
+                        .iter()
+                        .map(|s| s.content.as_ref())
+                        .collect::<String>()
+                })
+                .unwrap_or_default();
+            let p =
+                Paragraph::new(sanitize_control(&caption)).style(Style::new().fg(Color::DarkGray));
+            frame.render_widget(p, info_rect);
+        }
+        return (content_area.width, content_area.height);
     }
 
     // Reserve an in-pane gutter for whichever scrollbars overflow, then render the file into the

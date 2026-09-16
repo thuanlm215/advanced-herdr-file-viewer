@@ -25,6 +25,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::DefaultTerminal;
+use ratatui::text::Text;
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::io;
@@ -78,6 +79,7 @@ pub fn run(
     // The Content Renderer size caps (config `preview_max_lines` / `preview_max_kib`, already clamped
     // and byte-converted). `Copy`, so the factory closure below captures it by value.
     let caps = eff.preview_caps();
+    let decode_images = eff.image_protocol != crate::config::ImageProtocol::Off;
 
     // The root-bound providers are built by a factory so a later re-root rebuilds them against
     // the new root (ADR-0004). Non-capturing — it reads the passed `Resolved`, so re-root gets
@@ -100,6 +102,7 @@ pub fn run(
                 root: resolved.root.clone(),
                 renderers: factory_renderers.clone(),
                 caps,
+                decode_images,
             });
             RootProviders { git, content }
         });
@@ -212,6 +215,11 @@ pub fn run(
     ));
 
     let mut terminal = ratatui::try_init()?;
+    // Query capabilities after alternate-screen init (ratatui-image contract). Off skips the
+    // picker so ImageView never decodes pixels.
+    if let Some(picker) = crate::image_preview::init_picker(eff.image_protocol) {
+        controller.set_image_picker(picker);
+    }
     // Arm relaunch only after the TUI has initialized successfully. A resumed process reuses the
     // existing record; an ordinary managed plugin pane creates one from its injected identity.
     // Standalone/partial environments and state I/O failures simply retain the old behavior.
@@ -232,11 +240,13 @@ pub fn run(
     // mouse-reporting mode.
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        crate::controller::clear_kitty_images();
         let _ = execute!(io::stdout(), DisableMouseCapture);
         let _ = execute!(io::stdout(), DisableFocusChange);
         prev_hook(info);
     }));
     let outcome = event_loop(&mut terminal, &mut controller);
+    crate::controller::clear_kitty_images();
     let _ = execute!(io::stdout(), DisableMouseCapture);
     let _ = execute!(io::stdout(), DisableFocusChange);
     let restore_result = ratatui::try_restore();
@@ -595,6 +605,8 @@ struct LiveContent {
     /// The size caps (line + byte) for classifying/previewing content, resolved from config
     /// (`preview_max_lines` / `preview_max_kib`) at startup. `Copy`.
     caps: Caps,
+    /// When false (`image_protocol = "off"`), ImageView is metadata-only — no pixel decode.
+    decode_images: bool,
 }
 
 impl ContentProvider for LiveContent {
@@ -612,6 +624,20 @@ impl ContentProvider for LiveContent {
         pane_width: Option<u16>,
         diff_render_mode: DiffRenderMode,
     ) -> RenderResult {
+        if mode == ViewMode::ImageView {
+            let preview = crate::image_preview::open_for_preview(
+                &self.root,
+                path,
+                self.renderers.timeout,
+                self.decode_images,
+            );
+            return RenderResult {
+                content: Text::raw(preview.caption),
+                notices: preview.notices,
+                source: None,
+                image: preview.image,
+            };
+        }
         // Both diff modes render from git's diff text, not the file bytes — so a deleted or
         // binary file still shows its diff (AC-9), and there is no point classifying (a wasted
         // bounded file read). Other modes classify first (binary / size guards, AC-12/13).
@@ -699,6 +725,7 @@ impl ContentProvider for LiveContent {
             content,
             notices: notice.into_iter().collect(),
             source,
+            image: None,
         }
     }
 }
@@ -918,6 +945,7 @@ fn current_os_kind() -> crate::opener::OsKind {
 /// capture is dropped too: otherwise our capture mode leaks into the editor, which would see
 /// raw mouse escape sequences instead of normal input.
 fn suspend_tui() -> io::Result<()> {
+    crate::controller::clear_kitty_images();
     let _ = execute!(io::stdout(), DisableMouseCapture);
     let _ = execute!(io::stdout(), DisableFocusChange);
     disable_raw_mode()?;
@@ -1094,6 +1122,7 @@ mod tests {
                 content: ratatui::text::Text::raw("body"),
                 notices: Vec::new(),
                 source: None,
+                image: None,
             }
         }
     }
@@ -1479,6 +1508,7 @@ mod tests {
                 timeout: Duration::from_secs(5),
             },
             caps: Caps::default(),
+            decode_images: true,
         }
     }
 
@@ -1505,6 +1535,7 @@ mod tests {
                 max_lines: 50,
                 max_bytes: 1024 * 1024,
             },
+            decode_images: true,
         };
         let out = content.render_at_width(
             &file,

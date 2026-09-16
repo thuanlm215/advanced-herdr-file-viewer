@@ -52,7 +52,7 @@ impl Default for Caps {
 /// Render a cap as a short human label for a truncation notice (`1 MB`, `512 KB`). Values come from
 /// a KiB config knob, so they are whole kibibytes; MiB-round values read as `N MB` (matching the
 /// historical "1 MB" wording), everything else as `N KB`.
-fn human_bytes(n: u64) -> String {
+pub(crate) fn human_bytes(n: u64) -> String {
     let kib = n / 1024;
     if kib >= 1024 && kib.is_multiple_of(1024) {
         format!("{} MB", kib / 1024)
@@ -89,6 +89,23 @@ pub enum Prepared {
     Full { text: String },
 }
 
+/// Canonicalize `path` and return it only if it is a **regular file inside `root`**.
+///
+/// Shared by [`classify`] and image preview: a symlink/`..` escaping the root cannot leak
+/// out-of-root content (AC-N5), and a FIFO/device/dir is never opened (no hang).
+pub fn resolve_regular_file_in_root(root: &Path, path: &Path) -> Option<std::path::PathBuf> {
+    let (Ok(canonical), Ok(canon_root)) = (path.canonicalize(), root.canonicalize()) else {
+        return None;
+    };
+    if !canonical.starts_with(&canon_root) {
+        return None;
+    }
+    match std::fs::metadata(&canonical) {
+        Ok(m) if m.is_file() => Some(canonical),
+        _ => None,
+    }
+}
+
 /// Classify a file for display: binary vs. truncated-preview vs. full text. Reads at most
 /// `caps.max_bytes` from disk, so a huge or hostile file can never be slurped whole (AC-N1).
 ///
@@ -97,16 +114,9 @@ pub enum Prepared {
 /// (AC-N5), and a FIFO/device/dir is never opened (no hang, no garbage). Such paths
 /// return `Binary` (a placeholder, no bytes).
 pub fn classify(root: &Path, path: &Path, caps: Caps) -> Prepared {
-    let (Ok(canonical), Ok(canon_root)) = (path.canonicalize(), root.canonicalize()) else {
-        return Prepared::Binary; // unresolvable / missing
+    let Some(canonical) = resolve_regular_file_in_root(root, path) else {
+        return Prepared::Binary;
     };
-    if !canonical.starts_with(&canon_root) {
-        return Prepared::Binary; // escapes the root (AC-N5)
-    }
-    match std::fs::metadata(&canonical) {
-        Ok(m) if m.is_file() => {}
-        _ => return Prepared::Binary, // dir / FIFO / device / gone
-    }
 
     let byte_len = std::fs::metadata(&canonical).map(|m| m.len()).unwrap_or(0);
     let Ok(file) = File::open(&canonical) else {
@@ -243,6 +253,9 @@ pub fn render(
             renderers.timeout,
             base_notice,
         ),
+        // LiveContent handles ImageView before calling `render`. This arm is only a fallback
+        // if a test or future caller asks `render` for ImageView without going through that path.
+        ViewMode::ImageView => (Text::raw("[binary file: preview not shown]"), None),
         ViewMode::Diff | ViewMode::FullDiff => unreachable!("handled above"),
     }
 }
@@ -403,6 +416,7 @@ fn capability(mode: ViewMode) -> &'static str {
         ViewMode::FullDiff => "Full-file diff",
         ViewMode::RenderedMarkdown => "Markdown",
         ViewMode::SyntaxContent => "Syntax",
+        ViewMode::ImageView => "Image",
     }
 }
 

@@ -30,8 +30,9 @@ is unit-testable with stubs.
 | `herdr` | The herdr CLI seam (`$HERDR_BIN_PATH`): read-only queries (list git worktrees / which workspaces have an active agent) plus best-effort host **layout** commands (`pane zoom --current --on`/`--off` for `Z`; a focused downward split for `G` / Open pane here; and direct manifest-pane open + validated configurable resize for a one-pane viewer on Unix). Open workspace here targets the newly created workspace and terminal by ID, labels it with the selected folder, optionally opens the viewer, and injects that exact tree boundary without changing manifest-command resolution; Windows retains its absolute-path split/run workaround because Herdr cannot launch the relative manifest command there. Neither path touches file or git state; an absent or failing herdr degrades gracefully (git-only picker, in-pane zoom only, or an action notice). |
 | `worktree` | Enumerate the repo's git worktrees (`git worktree list --porcelain`) and overlay herdr's agent-active workspace + per-row agent status, feeding the switch-worktree picker. |
 | `tree` | The rooted, `.gitignore`-aware file tree: filters (gitignored, changed-only, hidden/dotfiles), cursor, expansion, status markers. |
-| `view_policy` | A pure decision: which view mode a file gets (changed → diff, markdown → rendered, else → syntax content) and the cycle order. |
-| `render` | Produce the content-pane text: classify the file, delegate styling to an external CLI, and **neutralize escape sequences** before display. |
+| `view_policy` | A pure decision: which view mode a file gets (image → preview even if changed, else changed → diff, markdown → rendered, else → syntax content) and the cycle order. |
+| `render` | Produce the content-pane text: classify the file, decode images or delegate styling to an external CLI, and **neutralize escape sequences** before display. |
+| `image_preview` | Decode/downscale image files and encode the content-pane placement (Kitty PNG off-thread; halfblocks/sixel via `ratatui-image`). The Presenter only paints an already-encoded protocol. |
 | `presenter` | Draw the two-column (or zoomed / narrow) layout with ratatui, including persistent annotation markers and background-only styling; source-line backgrounds are applied beneath active line-select, ambient-selection, and search overlays, with a bounded one-cell cue for blank annotated lines. Scroll the tree/content and report viewport + pane geometry back for hit-testing. |
 | `picker` | The modal worktree-switcher overlay state (rows, cursor, horizontal scroll) drawn over the layout; captures its own nav / confirm / cancel keys while open. |
 | `proc` | Shared subprocess reaping: one `wait_bounded` (child wait + poll + timeout-kill) used by both the content renderer and the update check, so the timeout-kill semantics are defined once. |
@@ -95,8 +96,10 @@ retain file/title markers where applicable but never receive guessed source-line
   path/line copy. The editor path is a hand-off to an external process. Every `git` invocation uses
   read-only subcommands.
 - **Delegate rendering.** Markdown, diffs, and syntax highlighting are produced by best-in-class
-  external CLIs (`glow`, `delta`, `bat`): the viewer builds only the shell and ingests their
-  ANSI output. Each renderer is optional; a missing one degrades to plain text + a notice.
+  external CLIs (`glow`, `delta`, `bat`); inline image preview is handled natively (Kitty PNG
+  transmitted once per settled pane size, encoded off the input thread; halfblocks/sixel still
+  go through `ratatui-image`). Each external renderer is optional; a missing one degrades to
+  plain text + a notice.
 - **Git is first-class**, woven through the tree (status markers, colors, changed-only filter,
   baseline toggle) and the content pane (diff view), not a separate mode.
 - **In-memory, ephemeral UI state only**, including annotations, which start empty and are scoped

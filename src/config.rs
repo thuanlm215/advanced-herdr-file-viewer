@@ -190,6 +190,34 @@ impl TreeIcons {
     }
 }
 
+/// Which graphics protocol to use for inline image preview.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageProtocol {
+    /// Probe the terminal after TUI init; env fallback is Kitty/Ghostty only.
+    #[default]
+    Auto,
+    /// Force Kitty Graphics Protocol.
+    Kitty,
+    /// Force Sixel Graphics Protocol.
+    Sixel,
+    /// Force Unicode 24-bit halfblocks.
+    Halfblocks,
+    /// Disable pixel decode; ImageView shows dimensions/size only.
+    Off,
+}
+
+impl ImageProtocol {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Kitty => "kitty",
+            Self::Sixel => "sixel",
+            Self::Halfblocks => "halfblocks",
+            Self::Off => "off",
+        }
+    }
+}
+
 /// A `[keys]` entry's value: the key(s) an intent binds to, written **either** as a single string
 /// (`refresh = "g"`) **or** as a TOML array of strings (`nav_up = ["w", "Up"]`). `#[serde(untagged)]`
 /// tries the variants in order, so `One(String)` must come first: a bare string deserializes to
@@ -265,6 +293,8 @@ pub struct Config {
     /// and it bounds the disk read (AC-N1). `None` falls back to [`DEFAULT_PREVIEW_MAX_KIB`]; the
     /// resolver clamps a present value into `MIN_PREVIEW_MAX_KIB..=MAX_PREVIEW_MAX_KIB`. 1024 = 1 MiB.
     pub preview_max_kib: Option<u32>,
+    /// Image preview graphics protocol: `auto` (default), `kitty`, `sixel`, `halfblocks`, or `off`.
+    pub image_protocol: Option<String>,
     /// The `[keys]` remapping table: **intent name -> key spec** (T-4, Slice B). `None` when the
     /// config omits `[keys]`. A `BTreeMap` keeps the entries in deterministic order. Rides the
     /// existing defensive `load_config` / `parse_config` with no wiring change: a malformed `[keys]`
@@ -424,6 +454,8 @@ pub struct EffectiveSettings {
     /// `MIN_PREVIEW_MAX_KIB..=MAX_PREVIEW_MAX_KIB` when present, else [`DEFAULT_PREVIEW_MAX_KIB`].
     /// Config-or-default (no env var).
     pub preview_max_kib: u32,
+    /// The effective image preview graphics protocol.
+    pub image_protocol: ImageProtocol,
 }
 
 impl EffectiveSettings {
@@ -550,6 +582,19 @@ pub fn resolve(config: &Config, get_env: impl Fn(&str) -> Option<String>) -> Eff
         .map(|n| n.clamp(MIN_PREVIEW_MAX_KIB, MAX_PREVIEW_MAX_KIB))
         .unwrap_or(DEFAULT_PREVIEW_MAX_KIB);
 
+    let image_protocol = match config
+        .image_protocol
+        .as_deref()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("kitty") => ImageProtocol::Kitty,
+        Some("sixel") => ImageProtocol::Sixel,
+        Some("halfblocks") => ImageProtocol::Halfblocks,
+        Some("off") => ImageProtocol::Off,
+        _ => ImageProtocol::Auto,
+    };
+
     EffectiveSettings {
         editor,
         markdown,
@@ -569,6 +614,7 @@ pub fn resolve(config: &Config, get_env: impl Fn(&str) -> Option<String>) -> Eff
         file_icons,
         preview_max_lines,
         preview_max_kib,
+        image_protocol,
     }
 }
 
@@ -1487,6 +1533,30 @@ mod tests {
         let caps = resolve(&cfg, |_| None).preview_caps();
         assert_eq!(caps.max_lines, 3000);
         assert_eq!(caps.max_bytes, 512 * 1024);
+    }
+
+    #[test]
+    fn resolve_image_protocol_values_and_unknown_falls_back_to_auto() {
+        for (input, want) in [
+            (None, ImageProtocol::Auto),
+            (Some("auto"), ImageProtocol::Auto),
+            (Some("KITTY"), ImageProtocol::Kitty),
+            (Some("sixel"), ImageProtocol::Sixel),
+            (Some("halfblocks"), ImageProtocol::Halfblocks),
+            (Some("off"), ImageProtocol::Off),
+            (Some("  Kitty  "), ImageProtocol::Kitty),
+            (Some("nope"), ImageProtocol::Auto),
+        ] {
+            let cfg = Config {
+                image_protocol: input.map(str::to_string),
+                ..Default::default()
+            };
+            assert_eq!(
+                resolve(&cfg, |_| None).image_protocol,
+                want,
+                "image_protocol {input:?}"
+            );
+        }
     }
 
     #[test]

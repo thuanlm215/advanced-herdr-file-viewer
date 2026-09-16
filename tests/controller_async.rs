@@ -37,6 +37,7 @@ impl ContentProvider for SlowContent {
             content: Text::raw(format!("rendered:{name}")),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -58,6 +59,7 @@ impl ContentProvider for PanicOnContent {
             content: Text::raw(format!("rendered:{name}")),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -154,6 +156,7 @@ impl ContentProvider for EchoDiffContent {
             )),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -660,6 +663,7 @@ impl WidthProbe {
             content: Text::raw(s),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -902,6 +906,7 @@ fn render_at_width_default_impl_forwards_to_render_ignoring_width() {
                 content: Text::raw(format!("r:{name}:{}", raw_diff.unwrap_or("-"))),
                 notices: Vec::new(),
                 source: None,
+                image: None,
             }
         }
     }
@@ -953,6 +958,7 @@ impl ContentProvider for WidthDependentMatches {
             content: Text::raw(s),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }

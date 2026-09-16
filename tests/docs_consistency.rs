@@ -61,6 +61,7 @@ fn config_example_documents_every_config_key() {
         "file_icons",
         "preview_max_lines",
         "preview_max_kib",
+        "image_protocol",
     ] {
         assert!(
             has_commented_assignment(CONFIG_EXAMPLE, key),
@@ -155,6 +156,18 @@ fn configuration_doc_and_example_document_preview_caps() {
             "config.example.toml must document the `{key}` config key"
         );
     }
+}
+
+#[test]
+fn configuration_doc_and_example_document_image_protocol() {
+    assert!(
+        CONFIG_DOC.contains("image_protocol"),
+        "docs/configuration.md must document the `image_protocol` config key"
+    );
+    assert!(
+        CONFIG_EXAMPLE.contains("image_protocol"),
+        "config.example.toml must document the `image_protocol` config key"
+    );
 }
 
 #[test]

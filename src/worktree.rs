@@ -47,7 +47,14 @@ pub fn list(repo_root: &Path, current_root: &Path) -> Vec<Worktree> {
 
     let out = git_command(repo_root, &["worktree", "list", "--porcelain", "-z"])
         .output()
-        .ok();
+        .ok()
+        .filter(|o| o.status.success())
+        .or_else(|| {
+            git_command(repo_root, &["worktree", "list", "--porcelain"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+        });
 
     match out {
         Some(o) if o.status.success() => {
@@ -71,14 +78,16 @@ pub fn list(repo_root: &Path, current_root: &Path) -> Vec<Worktree> {
     }
 }
 
-/// Parse the raw bytes from `git worktree list --porcelain -z` into a `Vec<Worktree>`.
+/// Parse the raw bytes from `git worktree list --porcelain -z` (or `--porcelain` without `-z`)
+/// into a `Vec<Worktree>`.
 ///
 /// With `-z` each attribute line is NUL-terminated, and records are separated by an extra NUL
-/// (the `\0\0` boundary). Bare worktrees are silently excluded from the result.
+/// (the `\0\0` boundary). Without `-z`, lines are `\n`-terminated and records are separated by
+/// an empty line (`\n\n`). Bare worktrees are silently excluded from the result.
 /// `current_root` is the path whose worktree should be marked [`Worktree::is_current`].
 pub fn parse_porcelain(bytes: &[u8], current_root: &Path) -> Vec<Worktree> {
-    // Split on NUL; empty tokens mark record boundaries (the extra NUL between records).
-    let tokens: Vec<&[u8]> = bytes.split(|&b| b == b'\0').collect();
+    let delim = if bytes.contains(&b'\0') { b'\0' } else { b'\n' };
+    let tokens: Vec<&[u8]> = bytes.split(|&b| b == delim).collect();
 
     let mut result = Vec::new();
     let mut record: Vec<&[u8]> = Vec::new();

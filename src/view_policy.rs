@@ -1,9 +1,10 @@
 //! View Policy — a pure decision: which content-pane view mode a file gets.
 //!
-//! Precedence (design.md): changed → diff (even for markdown, AC-9); else markdown →
-//! rendered (AC-8); else → syntax-highlighted content (AC-10). The applicable set
-//! (AC-11) is what a mode-cycle key steps through; for a changed file it also offers a
-//! full-context diff (the whole file with line numbers and the diff shown inline). No I/O.
+//! Precedence: image → preview (even when git-changed — a binary diff is not useful);
+//! else changed → diff (even for markdown, AC-9); else markdown → rendered (AC-8);
+//! else → syntax-highlighted content (AC-10). The applicable set (AC-11) is what a
+//! mode-cycle key steps through; for a changed file it also offers a full-context diff.
+//! No I/O.
 
 use std::path::PathBuf;
 
@@ -19,6 +20,20 @@ pub enum ViewMode {
     FullDiff,
     /// Syntax-highlighted file content.
     SyntaxContent,
+    /// Image preview rendered via terminal graphics protocol (e.g. Kitty).
+    ImageView,
+}
+
+/// True when `path` has a previewable image extension (png/jpeg/gif/webp/bmp/ico/tiff).
+pub fn is_image(path: &std::path::Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase());
+    matches!(
+        ext.as_deref(),
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tiff" | "tif")
+    )
 }
 
 /// The facts the policy needs about a file — no path I/O is performed here.
@@ -27,11 +42,14 @@ pub struct FileDescriptor {
     pub path: PathBuf,
     pub is_markdown: bool,
     pub is_changed: bool,
+    pub is_image: bool,
 }
 
 /// The auto-selected default view mode for a file.
 pub fn default_mode(fd: &FileDescriptor) -> ViewMode {
-    if fd.is_changed {
+    if fd.is_image {
+        ViewMode::ImageView
+    } else if fd.is_changed {
         ViewMode::Diff
     } else if fd.is_markdown {
         ViewMode::RenderedMarkdown
@@ -54,6 +72,9 @@ pub fn applicable_modes(fd: &FileDescriptor) -> Vec<ViewMode> {
         add(&mut modes, ViewMode::Diff);
         add(&mut modes, ViewMode::FullDiff);
     }
+    if fd.is_image {
+        add(&mut modes, ViewMode::ImageView);
+    }
     if fd.is_markdown {
         add(&mut modes, ViewMode::RenderedMarkdown);
     }
@@ -66,10 +87,13 @@ mod tests {
     use super::*;
 
     fn fd(name: &str, is_markdown: bool, is_changed: bool) -> FileDescriptor {
+        let path = PathBuf::from(name);
+        let image = is_image(&path);
         FileDescriptor {
-            path: PathBuf::from(name),
+            path,
             is_markdown,
             is_changed,
+            is_image: image,
         }
     }
 
@@ -85,6 +109,33 @@ mod tests {
     fn changed_file_defaults_to_diff_even_when_markdown() {
         assert_eq!(default_mode(&fd("README.md", true, true)), ViewMode::Diff);
         assert_eq!(default_mode(&fd("main.rs", false, true)), ViewMode::Diff);
+    }
+
+    #[test]
+    fn unchanged_image_defaults_to_image_view() {
+        assert_eq!(
+            default_mode(&fd("photo.png", false, false)),
+            ViewMode::ImageView
+        );
+        assert_eq!(
+            default_mode(&fd("icon.webp", false, false)),
+            ViewMode::ImageView
+        );
+    }
+
+    #[test]
+    fn changed_image_defaults_to_preview_and_still_offers_diff() {
+        let f = fd("photo.png", false, true);
+        assert_eq!(default_mode(&f), ViewMode::ImageView);
+        assert_eq!(
+            applicable_modes(&f),
+            vec![
+                ViewMode::ImageView,
+                ViewMode::Diff,
+                ViewMode::FullDiff,
+                ViewMode::SyntaxContent
+            ]
+        );
     }
 
     #[test]

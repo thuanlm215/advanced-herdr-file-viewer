@@ -75,6 +75,7 @@ impl ContentProvider for StubContent {
             content: Text::raw("stub-content"),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -94,6 +95,7 @@ impl ContentProvider for DelayedNamedContent {
             content: Text::raw(format!("BODY-OF:{name}")),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -1190,6 +1192,7 @@ impl ContentProvider for LinesContent {
             content: Text::raw(body),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -1205,6 +1208,7 @@ impl ContentProvider for WideContent {
             content: Text::raw(body),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -3691,6 +3695,7 @@ impl ContentProvider for PathContent {
             content: Text::raw(format!("showing {}", path.display())),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -7702,6 +7707,7 @@ impl ContentProvider for WrapLines {
             content: Text::raw(lines.join("\n")),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -8012,6 +8018,7 @@ impl ContentProvider for SearchContent {
             content: Text::raw(lines.join("\n")),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -8728,6 +8735,7 @@ impl ContentProvider for SwitchingContent {
             content: Text::raw(lines.join("\n")),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -8982,6 +8990,7 @@ impl ContentProvider for ContentWithoutSentinel {
             content: Text::raw(lines),
             notices: Vec::new(),
             source: None,
+            image: None,
         }
     }
 }
@@ -10572,6 +10581,7 @@ fn open_help_appends_settings_section_when_display_is_set() {
         file_icons: herdr_file_viewer::config::TreeIcons::Unicode,
         preview_max_lines: 5000,
         preview_max_kib: 1024,
+        image_protocol: herdr_file_viewer::config::ImageProtocol::Auto,
     };
     let wired = SettingsWired {
         editor: None,

@@ -38,6 +38,9 @@ use crate::finder::FinderState;
 use crate::git::{Baseline, Status};
 use crate::help::{HelpSection, HelpSectionState, HelpState};
 use crate::herdr::HerdrCli;
+use crate::image_preview::{
+    ImageEncodeJob, ImageEncodeKind, Paint, encode_paint, terminal_is_tmux,
+};
 use crate::infile::{PromptMode, PromptState, SearchState};
 use crate::intent::Intent;
 use crate::picker::PickerState;
@@ -63,7 +66,7 @@ use std::io;
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 /// Tree-column width as a percentage of the pane: its default and the bounds the resize keys
@@ -76,6 +79,8 @@ const SPLIT_MIN: u16 = crate::config::MIN_TREE_WIDTH;
 const SPLIT_MAX: u16 = crate::config::MAX_TREE_WIDTH;
 /// How many percentage points one resize keypress moves the divider.
 const SPLIT_STEP: u16 = 5;
+/// Coalesce split-drags / zoom so we encode the image once at the settled size, not every pixel.
+const IMAGE_ENCODE_DEBOUNCE: Duration = Duration::from_millis(80);
 // The floor for an INTERACTIVE resize (grow/shrink keys, divider drag), below the config/startup
 // floor `SPLIT_MIN`. A hand resize may pull the tree narrower than the startup minimum — down to the
 // same 10% the Presenter's `columns()` renders at — so on a wide pane the tree can be shrunk below a
@@ -180,6 +185,20 @@ impl DiffRenderMode {
     }
 }
 
+/// Emit the Kitty graphics protocol escape sequence to delete all visible image placements.
+/// This prevents image ghosting when switching away from an image, resizing, launching an editor,
+/// or exiting the viewer. No-op when stdout is not a tty (so `cargo test` does not dump APC).
+pub fn clear_kitty_images() {
+    use std::io::{IsTerminal, Write};
+    let mut stdout = std::io::stdout();
+    if !stdout.is_terminal() {
+        return;
+    }
+    let _ = stdout.write_all(b"\x1b_Ga=d,d=i,i=1\x1b\\");
+    let _ = stdout.write_all(b"\x1b_Ga=d,d=a\x1b\\");
+    let _ = stdout.flush();
+}
+
 /// The rendered content pane for one file: ingested text plus any non-fatal notices
 /// (truncation AC-13, renderer fallback AC-25).
 pub struct RenderResult {
@@ -192,6 +211,8 @@ pub struct RenderResult {
     /// where no per-display-line source exists) and for providers that don't supply it; the
     /// copy paths then fall back to display-text extraction.
     pub source: Option<Vec<String>>,
+    /// Decoded image when viewing an image file in ImageView mode.
+    pub image: Option<Arc<image::DynamicImage>>,
 }
 
 /// Produce the content-pane text for `(file, mode)`. `Send` so a later task can run it on a
@@ -385,6 +406,8 @@ struct RenderJob {
 /// repo-root-relative path. Carried over a one-shot channel from the worker `re_root` spawns to
 /// the `poll` that applies them.
 type StatusResult = (BTreeMap<PathBuf, Status>, BTreeMap<PathBuf, Status>);
+/// Off-thread image encode result: job seq, paint (None if encode failed), cell width, cell height.
+type ImageEncodeResult = (u64, Option<Paint>, u16, u16);
 
 /// The single open modal overlay, or [`Modal::None`] when the columns have focus. Collapses what
 /// were four parallel `Option<…State>` fields (picker / finder / prompt / help) into one value, so
@@ -758,6 +781,20 @@ pub struct Controller {
     update_dismissed: bool,
     /// One-shot receiver for the background update check's result (`None` when no check ran).
     update_rx: Option<mpsc::Receiver<Option<Version>>>,
+    /// Terminal graphics protocol picker (ratatui-image). Used for halfblocks/sixel; Kitty PNG
+    /// bypasses it so we can transmit compressed payloads.
+    image_picker: Option<ratatui_image::picker::Picker>,
+    /// Downscaled source bitmap for the current ImageView file (`None` when not showing an image).
+    image_source: Option<Arc<image::DynamicImage>>,
+    /// Last encoded paint the Presenter draws. Produced off-thread; never resized on the UI thread.
+    image_paint: Option<Arc<Mutex<Paint>>>,
+    image_encode_tx: mpsc::Sender<ImageEncodeJob>,
+    image_encode_rx: mpsc::Receiver<ImageEncodeResult>,
+    image_encode_seq: u64,
+    /// Cell area the current `image_paint` was encoded for.
+    image_encoded_size: Option<(u16, u16)>,
+    image_pending_size: Option<(u16, u16)>,
+    image_encode_due: Option<Instant>,
     /// One-shot receiver for a re-root's off-thread status/changed-set computation (AC-17).
     /// `Some` between a re-root and the tick that applies the result; `None` otherwise.
     status_rx: Option<mpsc::Receiver<StatusResult>>,
@@ -887,6 +924,7 @@ impl Controller {
         // channel (AC-23). The worker exits when the job sender (held by the controller) is
         // dropped — which is also how a re-root retires the old worker.
         let (job_tx, result_rx) = Self::spawn_worker(Arc::clone(&git), content);
+        let (image_encode_tx, image_encode_rx) = Self::spawn_image_worker();
 
         let mut ctrl = Controller {
             tree: TreeModel::new(root.clone()),
@@ -951,6 +989,15 @@ impl Controller {
             keybindings_display: None,
             update_dismissed: false,
             update_rx: None,
+            image_picker: None,
+            image_source: None,
+            image_paint: None,
+            image_encode_tx,
+            image_encode_rx,
+            image_encode_seq: 0,
+            image_encoded_size: None,
+            image_pending_size: None,
+            image_encode_due: None,
             status_rx: None,
             modal: Modal::None,
             pending_goto: None,
@@ -1034,9 +1081,35 @@ impl Controller {
                     content: Text::raw("[content unavailable: renderer error]"),
                     notices: vec!["the renderer failed unexpectedly; showing a placeholder".into()],
                     source: None,
+                    image: None,
                 });
                 if result_tx.send((job.seq, result)).is_err() {
                     break; // controller gone
+                }
+            }
+        });
+        (job_tx, result_rx)
+    }
+
+    fn spawn_image_worker() -> (
+        mpsc::Sender<ImageEncodeJob>,
+        mpsc::Receiver<ImageEncodeResult>,
+    ) {
+        let (job_tx, job_rx) = mpsc::channel::<ImageEncodeJob>();
+        let (result_tx, result_rx) = mpsc::channel::<ImageEncodeResult>();
+        std::thread::spawn(move || {
+            while let Ok(mut job) = job_rx.recv() {
+                while let Ok(newer) = job_rx.try_recv() {
+                    job = newer;
+                }
+                let seq = job.seq;
+                let cols = job.cols;
+                let rows = job.rows;
+                let paint = std::panic::catch_unwind(AssertUnwindSafe(|| encode_paint(job)))
+                    .ok()
+                    .flatten();
+                if result_tx.send((seq, paint, cols, rows)).is_err() {
+                    break;
                 }
             }
         });
@@ -1396,6 +1469,146 @@ impl Controller {
         self.opener = Some(opener);
     }
 
+    /// Inject the terminal graphics picker (ratatui-image).
+    pub fn set_image_picker(&mut self, picker: ratatui_image::picker::Picker) {
+        self.image_picker = Some(picker);
+    }
+
+    fn image_cell_area(&self) -> Option<(u16, u16)> {
+        let width = self.content_width;
+        if width == 0 || self.content_height == 0 {
+            return None;
+        }
+        let height = if self.content_height > 1 {
+            self.content_height.saturating_sub(1)
+        } else {
+            self.content_height
+        };
+        Some((width, height))
+    }
+
+    fn graphics_are_kitty(&self) -> bool {
+        self.image_picker.as_ref().is_some_and(|picker| {
+            picker.protocol_type() == ratatui_image::picker::ProtocolType::Kitty
+        }) || self
+            .image_paint
+            .as_ref()
+            .and_then(|lock| lock.lock().ok().map(|paint| paint.is_kitty()))
+            .unwrap_or(false)
+    }
+
+    fn clear_graphics(&self) {
+        if self.graphics_are_kitty() {
+            clear_kitty_images();
+        }
+    }
+
+    fn clear_image_preview(&mut self) {
+        let had = self.image_paint.is_some() || self.image_source.is_some();
+        if had {
+            self.clear_graphics();
+        }
+        self.image_source = None;
+        self.image_paint = None;
+        self.image_encoded_size = None;
+        self.image_pending_size = None;
+        self.image_encode_due = None;
+        self.image_encode_seq = self.image_encode_seq.wrapping_add(1);
+    }
+
+    fn install_image_source(&mut self, img: Option<Arc<image::DynamicImage>>) {
+        self.image_paint = None;
+        self.image_encoded_size = None;
+        self.image_pending_size = None;
+        self.image_encode_seq = self.image_encode_seq.wrapping_add(1);
+        if self.image_source.is_some() || img.is_some() {
+            self.clear_graphics();
+        }
+        self.image_source = img;
+        if self.image_source.is_some() {
+            self.schedule_image_encode();
+        } else {
+            self.image_encode_due = None;
+        }
+    }
+
+    fn schedule_image_encode(&mut self) {
+        let Some(size) = self.image_cell_area() else {
+            return;
+        };
+        if self.image_source.is_none() || self.image_picker.is_none() {
+            return;
+        }
+        if self.image_encoded_size == Some(size) || self.image_pending_size == Some(size) {
+            return;
+        }
+        if self.image_paint.is_some() {
+            self.clear_graphics();
+        }
+        self.image_pending_size = Some(size);
+        self.image_encode_due = Some(if self.image_paint.is_none() {
+            Instant::now()
+        } else {
+            Instant::now() + IMAGE_ENCODE_DEBOUNCE
+        });
+    }
+
+    fn poll_image_encode(&mut self) -> bool {
+        let mut applied = false;
+        if let Some(due) = self.image_encode_due
+            && due <= Instant::now()
+        {
+            self.image_encode_due = None;
+            self.send_image_encode();
+        }
+        while let Ok((seq, paint, cols, rows)) = self.image_encode_rx.try_recv() {
+            if seq != self.image_encode_seq {
+                continue;
+            }
+            if let Some(paint) = paint {
+                self.image_paint = Some(Arc::new(Mutex::new(paint)));
+                self.image_encoded_size = Some((cols, rows));
+                if self.image_pending_size == Some((cols, rows)) {
+                    self.image_pending_size = None;
+                }
+                applied = true;
+            }
+        }
+        applied
+    }
+
+    fn send_image_encode(&mut self) {
+        let Some((cols, rows)) = self.image_pending_size.or_else(|| self.image_cell_area()) else {
+            return;
+        };
+        let Some(image) = self.image_source.clone() else {
+            return;
+        };
+        let Some(picker) = self.image_picker.as_ref() else {
+            return;
+        };
+        self.image_encode_seq = self.image_encode_seq.wrapping_add(1);
+        let seq = self.image_encode_seq;
+        self.image_pending_size = Some((cols, rows));
+        let kind = if picker.protocol_type() == ratatui_image::picker::ProtocolType::Kitty {
+            let font = picker.font_size();
+            ImageEncodeKind::KittyPng {
+                is_tmux: terminal_is_tmux(),
+                font_w: font.width.max(1),
+                font_h: font.height.max(1),
+            }
+        } else {
+            ImageEncodeKind::Ratatui(picker.clone())
+        };
+        let _ = self.image_encode_tx.send(ImageEncodeJob {
+            seq,
+            image,
+            cols,
+            rows,
+            kind,
+        });
+    }
+
     /// Install the effective key bindings resolved from the registry + the config's `[keys]` table,
     /// plus the resolver's [`KeyLoadOutcome`](crate::input::KeyLoadOutcome) (Slice B, T-6). Called
     /// once by `app::run` after construction (mirrors [`set_settings_display`](Self::set_settings_display));
@@ -1625,6 +1838,9 @@ impl Controller {
         if width_changed {
             self.rerender_after_resize();
         }
+        if self.image_source.is_some() {
+            self.schedule_image_encode();
+        }
         need_redraw
     }
 
@@ -1829,6 +2045,7 @@ impl Controller {
                 }),
             help: self.help_view(),
             context_menu: self.context_menu_view(),
+            image: self.image_paint.clone(),
         }
     }
 
@@ -2980,7 +3197,7 @@ impl Controller {
         let reflow = match mode {
             ViewMode::RenderedMarkdown => self.effective_wrap(),
             ViewMode::Diff | ViewMode::FullDiff => self.diff_render_mode != DiffRenderMode::Raw,
-            ViewMode::SyntaxContent => false,
+            ViewMode::SyntaxContent | ViewMode::ImageView => false,
         };
         if reflow {
             self.dispatch_reflow(node.path, mode);
@@ -3113,6 +3330,7 @@ impl Controller {
             })
             .is_ok()
         {
+            self.clear_image_preview();
             self.content = Text::raw("Rendering\u{2026}");
             self.content_notices.clear();
             self.content_source = None; // the placeholder has no source; the landing render brings its own
@@ -3125,6 +3343,7 @@ impl Controller {
     /// tree. The strings are static and first-party, so they need no AC-27 sanitization (they
     /// carry no control bytes); they flow through the same content path the renderer uses.
     fn clear_content(&mut self, reason: EmptyReason) {
+        self.clear_image_preview();
         self.content = Text::raw(reason.label());
         self.content_notices.clear();
         self.content_source = None; // guidance text has no source behind it
@@ -3141,8 +3360,10 @@ impl Controller {
     pub fn poll(&mut self) -> Option<Effects> {
         let mut applied = false;
         applied |= self.poll_workspace_search();
+        applied |= self.poll_image_encode();
         while let Ok((seq, result)) = self.result_rx.try_recv() {
             if seq == self.latest_seq {
+                self.install_image_source(result.image);
                 // A width-reflow re-render (a resize, not a selection change): its content replaces
                 // the current body, but scroll and search must survive — the user did not navigate.
                 // Cleared unconditionally so a later selection-change render is never mistaken for a
@@ -3253,6 +3474,9 @@ impl Controller {
                 Err(mpsc::TryRecvError::Empty) => {}
             }
         }
+        // A freshly-landed ImageView render schedules encode with due=now; flush it this tick
+        // so the first paint does not wait an extra idle poll.
+        applied |= self.poll_image_encode();
         applied.then(Effects::redraw)
     }
 
@@ -3276,6 +3500,7 @@ impl Controller {
             path: path.to_path_buf(),
             is_markdown: is_markdown(path),
             is_changed: self.is_changed(path),
+            is_image: crate::view_policy::is_image(path),
         }
     }
 
@@ -3433,6 +3658,7 @@ mod tests {
                 content: Text::raw(""),
                 notices: Vec::new(),
                 source: None,
+                image: None,
             }
         }
     }
@@ -3446,6 +3672,7 @@ mod tests {
                 content: Text::raw(body),
                 notices: Vec::new(),
                 source: Some((1..=40).map(|i| format!("body line {i}")).collect()),
+                image: None,
             }
         }
     }

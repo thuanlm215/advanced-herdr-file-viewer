@@ -285,7 +285,8 @@ pub fn settings_text(
          tree_max_cols     = {tree_max_cols}\n\
          file_icons        = {file_icons}\n\
          preview_max_lines = {preview_max_lines}\n\
-         preview_max_kib   = {preview_max_kib}",
+         preview_max_kib   = {preview_max_kib}\n\
+         image_protocol    = {image_protocol}",
         open = open,
         reveal = reveal,
         hide_dotfiles = eff.hide_dotfiles,
@@ -300,6 +301,7 @@ pub fn settings_text(
         file_icons = eff.file_icons.label(),
         preview_max_lines = eff.preview_max_lines,
         preview_max_kib = eff.preview_max_kib,
+        image_protocol = eff.image_protocol.label(),
     )
 }
 
@@ -797,6 +799,7 @@ mod tests {
             file_icons: crate::config::TreeIcons::Unicode,
             preview_max_lines: 8000,
             preview_max_kib: 2048,
+            image_protocol: crate::config::ImageProtocol::Auto,
         }
     }
 
@@ -837,6 +840,7 @@ mod tests {
             "file_icons",
             "preview_max_lines",
             "preview_max_kib",
+            "image_protocol",
         ] {
             assert!(
                 text.contains(key),
