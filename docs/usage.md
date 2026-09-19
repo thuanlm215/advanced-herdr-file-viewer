@@ -190,7 +190,8 @@ non-image file shows its **diff**, a markdown file **renders**, and anything els
   `.tiff`, `.tif`) renders it inline in the content pane using the Kitty graphics protocol on
   Kitty, Ghostty, or herdr (from the environment), or Unicode 24-bit halfblocks
   with image dimensions (`{width} × {height} px`) and file size. The image is fitted and centered
-  in the pane. Graphics are cleared when navigating away, the pane size settles after a resize, a
+  in the pane. Files past a 1600 px long edge are transmitted at preview size so a 12 MP photo
+  does not stall herdr; screenshots at or under that stay native. Graphics are cleared when navigating away, the pane size settles after a resize, a
   modal overlay opens over the image, or an editor is launched. `image_protocol = "off"` shows
   only that dimension caption.
 - **Cycle the view** with `v` to override the automatic choice (e.g. see a changed markdown file's

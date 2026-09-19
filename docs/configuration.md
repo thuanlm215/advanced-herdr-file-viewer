@@ -135,7 +135,11 @@ Kitty (its placeholders are unimplemented). Set `"kitty"` to force Kitty, `"sixe
 Image files are still gated like other content: the path must canonicalize to a regular file
 inside the tree root (symlinks that escape, FIFOs, and devices are refused), decode runs under a
 wall-clock timeout and a pixel/allocation cap, and files larger than **20 MB** are not opened
-(this hard cap is independent of `preview_max_kib`, which bounds text reads).
+(this hard cap is independent of `preview_max_kib`, which bounds text reads). A successful
+decode is immediately downscaled to a preview resolution (long edge 1600 px) before the pane
+paints, so a 12 MP photo does not pin CPU. Screenshots at or under that size stay native.
+The Kitty PNG may be up to **2.5 MiB** (photos compress poorly); a tighter byte cap was
+what still smeared 1536×1024 game art.
 
 
 `confirm_discard` guards the one piece of state the viewer can lose. Annotations (`a` / `A`) are
