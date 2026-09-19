@@ -1,8 +1,9 @@
 //! Inline image preview: decode/downscale plus Kitty PNG placement.
 //!
 //! ratatui-image's Kitty backend transmits uncompressed RGBA and resizes on the UI thread.
-//! Over SSH that is megabytes per pane-resize and pegs CPU. We transmit PNG instead, cap
-//! decoded pixels, and encode off the input thread.
+//! Over SSH that is megabytes per pane-resize and pegs CPU. We transmit a small PNG instead,
+//! cap decoded pixels, encode off the input thread, and write the Kitty payload once to
+//! stdout (never as a ratatui cell — that copy is what stalled herdr).
 
 use crate::config::ImageProtocol;
 use image::DynamicImage;
@@ -26,11 +27,17 @@ pub const IMAGE_MAX_BYTES: u64 = 20 * 1024 * 1024;
 /// Decode-time pixel box. Combined with `max_alloc` so a decompression bomb fails closed.
 const DECODE_MAX_DIM: u32 = 8192;
 const DECODE_MAX_ALLOC: u64 = 64 * 1024 * 1024;
-/// Long-edge cap after decode. Keeps the worker from holding a 40 MP bitmap just to show a preview.
+/// Long-edge cap after decode. 4K/12 MP still gets reduced; a 1536×1024 screenshot must stay
+/// native — 800 px + Kitty upscale is what made previews look smeared.
 pub const MAX_SOURCE_EDGE: u32 = 1600;
-/// Long-edge cap for the PNG we actually transmit (Kitty scales it onto the placeholder grid).
-const MAX_TRANSMIT_EDGE: u32 = 1280;
-const MAX_TRANSMIT_PIXELS: u64 = 1280 * 800;
+/// Long-edge / pixel cap for the PNG we actually transmit (Kitty scales it onto the placeholder
+/// grid). Match [`MAX_SOURCE_EDGE`] so a HiDPI pane downscales (sharp) instead of upscaling.
+const MAX_TRANSMIT_EDGE: u32 = 1600;
+const MAX_TRANSMIT_PIXELS: u64 = 1600 * 1000;
+/// Encoded PNG budget (before base64). Game screenshots / photos compress badly as PNG
+/// (~2 MiB at 1536×1024). A 256 KiB cap still crushed them to ~500 px. Direct stdout can
+/// carry a couple of megabytes once; only shrink pixels past this.
+const MAX_TRANSMIT_PNG_BYTES: usize = 2560 * 1024;
 /// Nominal cell aspect (width/height) used to Fit the placeholder grid. Typical terminal glyphs
 /// are about twice as tall as they are wide; a probe is not required for a preview.
 const CELL_ASPECT: f64 = 0.5;
@@ -201,6 +208,12 @@ fn decode_bounded(path: &Path, timeout: Duration) -> Result<DynamicImage, String
 }
 
 fn decode_with_limits(path: &Path) -> Result<DynamicImage, String> {
+    // One decode at a time. A timed-out job still finishes in the background; without this
+    // slot, browsing photos would stack full-size JPEG decodes and pin every core.
+    static DECODE_SLOT: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _slot = DECODE_SLOT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let mut reader =
         image::ImageReader::open(path).map_err(|e| format!("could not read image: {e}"))?;
     let mut limits = image::Limits::default();
@@ -217,14 +230,20 @@ fn decode_with_limits(path: &Path) -> Result<DynamicImage, String> {
 
 /// Downscale a decoded image so later clones/encodes stay bounded.
 pub fn downscale_for_preview(img: DynamicImage) -> DynamicImage {
-    if img.width() <= MAX_SOURCE_EDGE && img.height() <= MAX_SOURCE_EDGE {
-        return img;
+    let img = if img.width() <= MAX_SOURCE_EDGE && img.height() <= MAX_SOURCE_EDGE {
+        img
+    } else {
+        img.resize(
+            MAX_SOURCE_EDGE,
+            MAX_SOURCE_EDGE,
+            image::imageops::FilterType::Triangle,
+        )
+    };
+    if img.color().has_alpha() || matches!(img, DynamicImage::ImageRgb8(_)) {
+        img
+    } else {
+        DynamicImage::ImageRgb8(img.to_rgb8())
     }
-    img.resize(
-        MAX_SOURCE_EDGE,
-        MAX_SOURCE_EDGE,
-        image::imageops::FilterType::Triangle,
-    )
 }
 
 pub(crate) struct ImageEncodeJob {
@@ -248,14 +267,14 @@ pub(crate) fn encode_paint(job: ImageEncodeJob) -> Option<Paint> {
     if job.cols == 0 || job.rows == 0 {
         return None;
     }
-    let img = Arc::try_unwrap(job.image).unwrap_or_else(|shared| (*shared).clone());
     match job.kind {
         ImageEncodeKind::KittyPng {
             is_tmux,
             font_w,
             font_h,
-        } => Paint::from_kitty_png(&img, job.cols, job.rows, is_tmux, font_w, font_h),
+        } => Paint::from_kitty_png(&job.image, job.cols, job.rows, is_tmux, font_w, font_h),
         ImageEncodeKind::Ratatui(picker) => {
+            let img = Arc::try_unwrap(job.image).unwrap_or_else(|shared| (*shared).clone());
             let mut protocol = picker.new_resize_protocol(img);
             protocol.resize_encode(
                 &Resize::Fit(None),
@@ -296,19 +315,25 @@ impl KittyPng {
         let cell_aspect = f64::from(font_w.max(1)) / f64::from(font_h.max(1));
         let (cols, rows) =
             placeholder_size(img.width(), img.height(), max_cols, max_rows, cell_aspect);
-        let (px_w, px_h) = fit_transmit_px(
-            img.width(),
-            img.height(),
-            u32::from(cols) * u32::from(font_w.max(1)),
-            u32::from(rows) * u32::from(font_h.max(1)),
-        );
-        let fitted = if img.width() == px_w && img.height() == px_h {
-            None
-        } else {
-            Some(img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3))
-        };
-        let src = fitted.as_ref().unwrap_or(img);
-        let png = encode_png(src)?;
+        // Ignore the guessed cell-pixel box (default 10×20). Underestimating that on a HiDPI
+        // pane sent too few pixels and Kitty upscaled them into mush. Cap the bitmap instead;
+        // Kitty downscales onto the placeholder grid.
+        let (mut px_w, mut px_h) = fit_transmit_px(img.width(), img.height());
+        let mut png = Vec::new();
+        for attempt in 0..3 {
+            let fitted = (img.width() != px_w || img.height() != px_h)
+                .then(|| img.resize_exact(px_w, px_h, image::imageops::FilterType::Triangle));
+            png = encode_png(fitted.as_ref().unwrap_or(img))?;
+            if png.len() <= MAX_TRANSMIT_PNG_BYTES || attempt == 2 {
+                break;
+            }
+            // Stay close to the budget: a 0.35 floor turned a 2 MiB screenshot into ~500 px.
+            let shrink = (MAX_TRANSMIT_PNG_BYTES as f64 / png.len() as f64)
+                .sqrt()
+                .clamp(0.55, 0.9);
+            px_w = (f64::from(px_w) * shrink).round().max(32.0) as u32;
+            px_h = (f64::from(px_h) * shrink).round().max(32.0) as u32;
+        }
         let transmit = kitty_transmit_png(KITTY_ID, &png, cols, rows, is_tmux);
         let [id_extra, id_r, id_g, id_b] = KITTY_ID.to_be_bytes();
         Some(Self {
@@ -322,12 +347,13 @@ impl KittyPng {
     }
 
     fn render(&mut self, area: Rect, buf: &mut Buffer) {
-        let seq = if self.transmitted {
-            None
-        } else {
+        if !self.transmitted {
             self.transmitted = true;
-            Some(self.transmit.as_str())
-        };
+            // Write the APC payload directly. Putting it in a ratatui cell forced the backend
+            // to clone and diff a 0.5–1 MiB symbol on the UI thread, which is what froze herdr.
+            emit_kitty_payload(&self.transmit);
+            self.transmit = String::new();
+        }
         render_placeholders(
             placement_rect(area, self.cols, self.rows),
             self.cols,
@@ -335,19 +361,17 @@ impl KittyPng {
             buf,
             &self.id_color,
             self.id_extra,
-            seq,
+            None,
         );
     }
 }
 
-fn fit_transmit_px(src_w: u32, src_h: u32, box_w: u32, box_h: u32) -> (u32, u32) {
+fn fit_transmit_px(src_w: u32, src_h: u32) -> (u32, u32) {
     let src_w = src_w.max(1);
     let src_h = src_h.max(1);
-    let box_w = box_w.clamp(1, MAX_TRANSMIT_EDGE);
-    let box_h = box_h.clamp(1, MAX_TRANSMIT_EDGE);
-    let scale = (f64::from(box_w) / f64::from(src_w)).min(f64::from(box_h) / f64::from(src_h));
-    // Never upscale: extra pixels are free sharpness if the source is already small.
-    let scale = scale.min(1.0);
+    let scale = (f64::from(MAX_TRANSMIT_EDGE) / f64::from(src_w))
+        .min(f64::from(MAX_TRANSMIT_EDGE) / f64::from(src_h))
+        .min(1.0);
     let mut w = (f64::from(src_w) * scale).round().max(1.0) as u32;
     let mut h = (f64::from(src_h) * scale).round().max(1.0) as u32;
     let pixels = u64::from(w) * u64::from(h);
@@ -399,19 +423,45 @@ fn placement_rect(area: Rect, cols: u16, rows: u16) -> Rect {
 }
 
 fn encode_png(img: &DynamicImage) -> Option<Vec<u8>> {
-    let rgba = img.to_rgba8();
     let mut out = Vec::new();
-    let encoder =
-        PngEncoder::new_with_quality(&mut out, CompressionType::Fast, PngFilter::Adaptive);
-    encoder
-        .write_image(
-            rgba.as_raw(),
-            img.width(),
-            img.height(),
-            image::ExtendedColorType::Rgba8,
-        )
-        .ok()?;
+    // Fast + Sub: Adaptive tries every filter per row (CPU), and RGBA is 33% more pixels
+    // for photos that have no alpha. Kitty `f=100` accepts either.
+    let encoder = PngEncoder::new_with_quality(&mut out, CompressionType::Fast, PngFilter::Sub);
+    if img.color().has_alpha() {
+        let rgba = img.to_rgba8();
+        encoder
+            .write_image(
+                rgba.as_raw(),
+                img.width(),
+                img.height(),
+                image::ExtendedColorType::Rgba8,
+            )
+            .ok()?;
+    } else {
+        let rgb = img.to_rgb8();
+        encoder
+            .write_image(
+                rgb.as_raw(),
+                img.width(),
+                img.height(),
+                image::ExtendedColorType::Rgb8,
+            )
+            .ok()?;
+    }
     Some(out)
+}
+
+fn emit_kitty_payload(seq: &str) {
+    use std::io::{IsTerminal, Write};
+    if seq.is_empty() {
+        return;
+    }
+    let mut stdout = std::io::stdout();
+    if !stdout.is_terminal() {
+        return;
+    }
+    let _ = stdout.write_all(seq.as_bytes());
+    let _ = stdout.flush();
 }
 
 fn kitty_transmit_png(id: u32, png: &[u8], cols: u16, rows: u16, is_tmux: bool) -> String {
@@ -583,6 +633,58 @@ mod tests {
     }
 
     #[test]
+    fn screenshot_sized_images_stay_native() {
+        let img = downscale_for_preview(DynamicImage::new_rgb8(1536, 1024));
+        assert_eq!((img.width(), img.height()), (1536, 1024));
+        assert_eq!(fit_transmit_px(1229, 1037), (1229, 1037));
+        assert_eq!(fit_transmit_px(1536, 1024), (1536, 1024));
+    }
+
+    #[test]
+    fn game_screenshot_png_is_not_crushed_to_a_thumbnail() {
+        // Photographic PNGs are ~2 MiB at this size; the old 256 KiB cap shrank them to ~500 px.
+        let img = DynamicImage::ImageRgb8({
+            let mut buf = image::RgbImage::new(1536, 1024);
+            for (x, y, p) in buf.enumerate_pixels_mut() {
+                let n = x.wrapping_mul(73856093) ^ y.wrapping_mul(19349663);
+                *p = image::Rgb([(n >> 16) as u8, (n >> 8) as u8, n as u8]);
+            }
+            buf
+        });
+        let job = ImageEncodeJob {
+            seq: 1,
+            image: Arc::new(img),
+            cols: 100,
+            rows: 30,
+            kind: ImageEncodeKind::KittyPng {
+                is_tmux: false,
+                font_w: 10,
+                font_h: 20,
+            },
+        };
+        let Some(Paint::KittyPng(png)) = encode_paint(job) else {
+            panic!("expected kitty png paint");
+        };
+        assert!(
+            png.cols >= 80 && png.rows >= 20,
+            "placeholder {}x{} too small",
+            png.cols,
+            png.rows
+        );
+        // Native 1536×1024 PNG of noise is large but must still be sent, not downscaled away.
+        assert!(
+            png.transmit.len() > 200 * 1024,
+            "expected a large native payload, got {}",
+            png.transmit.len()
+        );
+        assert!(
+            png.transmit.len() < 4 * 1024 * 1024,
+            "transmit {} bytes",
+            png.transmit.len()
+        );
+    }
+
+    #[test]
     fn placement_rect_centers_a_smaller_image() {
         let area = Rect {
             x: 10,
@@ -642,6 +744,37 @@ mod tests {
         // and must stay well under a fullscreen RGBA dump (megabytes).
         assert!(
             png.transmit.len() < 8 * 1024,
+            "transmit {} bytes",
+            png.transmit.len()
+        );
+    }
+
+    #[test]
+    fn kitty_transmit_of_a_noisy_preview_stays_under_the_pty_budget() {
+        // Incompressible pixels so PNG cannot collapse to nothing; this is the class of
+        // payload that used to dump hundreds of KiB through the pane and stall herdr.
+        let mut buf = image::RgbImage::new(800, 500);
+        for (x, y, p) in buf.enumerate_pixels_mut() {
+            let n = x.wrapping_mul(73856093) ^ y.wrapping_mul(19349663);
+            *p = image::Rgb([(n >> 16) as u8, (n >> 8) as u8, n as u8]);
+        }
+        let job = ImageEncodeJob {
+            seq: 1,
+            image: Arc::new(DynamicImage::ImageRgb8(buf)),
+            cols: 120,
+            rows: 40,
+            kind: ImageEncodeKind::KittyPng {
+                is_tmux: false,
+                font_w: 10,
+                font_h: 20,
+            },
+        };
+        let Some(Paint::KittyPng(png)) = encode_paint(job) else {
+            panic!("expected kitty png paint");
+        };
+        // Noise at 800×500 is ~1 MiB PNG; must stay under the 2.5 MiB budget + base64.
+        assert!(
+            png.transmit.len() < 3 * 1024 * 1024,
             "transmit {} bytes",
             png.transmit.len()
         );

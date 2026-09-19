@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.23.1] - 2026-09-19
+
+### Fixed
+- Opening a large image no longer pins CPU or stalls herdr: decode is single-flight and immediately downscaled to a preview size, the Kitty PNG is RGB/capped, and the graphics payload is written once instead of being stuffed into a ratatui cell. → [usage](docs/usage.md#viewing-a-file)
+- Image preview no longer smears screenshots: keep native pixels up to 1600 px (Triangle downsample past that) and a 2.5 MiB Kitty PNG budget, instead of crushing photos to a few hundred pixels. → [usage](docs/usage.md#viewing-a-file)
+
 ## [1.23.0] - 2026-09-16
 
 ### Added
