@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- Restored File Viewer panes now wait briefly for Herdr's pane and shell queries to settle after a server restart, then reopen in the original pane. The startup hook reports its result in the plugin command log. → [summoning](docs/summoning.md)
+
 ## [1.23.1] - 2026-09-19
 
 ### Fixed
