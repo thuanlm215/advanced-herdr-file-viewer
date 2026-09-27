@@ -829,6 +829,7 @@ mod tests {
             .unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn open_refuses_symlink_escaping_root() {
         let root = tmp("escape");
@@ -838,15 +839,12 @@ mod tests {
             .join(format!("hfv-outside-{}.png", std::process::id()));
         write_tiny_png(&outside);
         let inside = root.join("photo.png");
-        #[cfg(unix)]
-        {
-            let _ = std::fs::remove_file(&inside);
-            std::os::unix::fs::symlink(&outside, &inside).unwrap();
-            let out = open_for_preview(&root, &inside, Duration::from_secs(2), true);
-            assert!(out.image.is_none());
-            assert!(out.notices.iter().any(|n| n.contains("tree root")));
-            let _ = std::fs::remove_file(&outside);
-        }
+        let _ = std::fs::remove_file(&inside);
+        std::os::unix::fs::symlink(&outside, &inside).unwrap();
+        let out = open_for_preview(&root, &inside, Duration::from_secs(2), true);
+        assert!(out.image.is_none());
+        assert!(out.notices.iter().any(|n| n.contains("tree root")));
+        let _ = std::fs::remove_file(&outside);
         let _ = std::fs::remove_dir_all(&root);
     }
 
