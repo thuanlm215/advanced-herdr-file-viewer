@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.23.2] - 2026-09-27
+
+### Fixed
+- File Viewer now reopens in its original pane after a Herdr server restart, even while the restored shell is still starting. The startup hook reports its result in the plugin command log. → [summoning](docs/summoning.md)
+
 ## [1.23.1] - 2026-09-19
 
 ### Fixed

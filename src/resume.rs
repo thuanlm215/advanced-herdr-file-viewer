@@ -18,6 +18,7 @@ use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 pub const STATE_DIR_ENV: &str = "HERDR_PLUGIN_STATE_DIR";
 pub const SOCKET_ENV: &str = "HERDR_SOCKET_PATH";
@@ -325,6 +326,24 @@ pub fn restore_with(
     viewer_exe: &Path,
     shell: ShellKind,
 ) -> RestoreSummary {
+    restore_with_timeout(
+        host,
+        state_dir,
+        socket_path,
+        viewer_exe,
+        shell,
+        Duration::ZERO,
+    )
+}
+
+fn restore_with_timeout(
+    host: &dyn HerdrCli,
+    state_dir: &Path,
+    socket_path: &str,
+    viewer_exe: &Path,
+    shell: ShellKind,
+    timeout: Duration,
+) -> RestoreSummary {
     let mut summary = RestoreSummary::default();
     if socket_path.is_empty() || !state_dir.is_absolute() {
         return summary;
@@ -337,21 +356,35 @@ pub fn restore_with(
     if records.is_empty() {
         return summary;
     }
+    let deadline = Instant::now() + timeout;
 
-    let Ok(raw_panes) = host.run_json(&["pane", "list"]) else {
+    let wanted: BTreeSet<&str> = records.iter().map(|(_, r)| r.pane_id.as_str()).collect();
+    let live = loop {
+        let live = host
+            .run_json(&["pane", "list"])
+            .ok()
+            .and_then(|raw| serde_json::from_str::<PaneListEnvelope>(&raw).ok())
+            .map(|panes| {
+                panes
+                    .result
+                    .panes
+                    .into_iter()
+                    .filter_map(|p| p.pane_id)
+                    .collect::<BTreeSet<_>>()
+            });
+        if live
+            .as_ref()
+            .is_some_and(|ids| wanted.iter().all(|id| ids.contains(*id)))
+            || Instant::now() >= deadline
+        {
+            break live;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    let Some(live) = live else {
         summary.skipped = records.len();
         return summary;
     };
-    let Ok(panes) = serde_json::from_str::<PaneListEnvelope>(&raw_panes) else {
-        summary.skipped = records.len();
-        return summary;
-    };
-    let live: BTreeSet<String> = panes
-        .result
-        .panes
-        .into_iter()
-        .filter_map(|p| p.pane_id)
-        .collect();
 
     // A corrupt directory may contain duplicate records for a pane. Deduplicate before issuing
     // host commands: at most one `pane run` is ever sent to a pane in one startup reconciliation.
@@ -370,13 +403,21 @@ pub fn restore_with(
             continue;
         }
 
-        let Ok(raw_process) =
-            host.run_json(&["pane", "process-info", "--pane", record.pane_id.as_str()])
-        else {
-            summary.skipped += 1;
-            continue;
+        let process = loop {
+            let process = host
+                .run_json(&["pane", "process-info", "--pane", record.pane_id.as_str()])
+                .ok()
+                .and_then(|raw| serde_json::from_str::<ProcessInfoEnvelope>(&raw).ok());
+            if process
+                .as_ref()
+                .is_some_and(|p| p.result.process_info.is_idle_shell())
+                || Instant::now() >= deadline
+            {
+                break process;
+            }
+            std::thread::sleep(Duration::from_millis(100));
         };
-        let Ok(process) = serde_json::from_str::<ProcessInfoEnvelope>(&raw_process) else {
+        let Some(process) = process else {
             summary.skipped += 1;
             continue;
         };
@@ -390,10 +431,19 @@ pub fn restore_with(
             continue;
         };
         let command = resume_command(shell, exe, record_arg);
-        if host
-            .run(&["pane", "run", record.pane_id.as_str(), command.as_str()])
-            .is_ok()
-        {
+        let launched = loop {
+            if host
+                .run(&["pane", "run", record.pane_id.as_str(), command.as_str()])
+                .is_ok()
+            {
+                break true;
+            }
+            if Instant::now() >= deadline {
+                break false;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        };
+        if launched {
             summary.relaunched += 1;
         } else {
             summary.skipped += 1;
@@ -423,7 +473,17 @@ pub fn restore_from_env(host: &dyn HerdrCli) -> RestoreSummary {
     let Ok(exe) = std::env::current_exe() else {
         return RestoreSummary::default();
     };
-    restore_with(host, &state_dir, &socket, &exe, ShellKind::current())
+    // Herdr starts startup hooks asynchronously as restored shells are still initializing.
+    // Give the pane list and process-info endpoints a short window to settle before deciding
+    // that a record is stale or a pane is busy.
+    restore_with_timeout(
+        host,
+        &state_dir,
+        &socket,
+        &exe,
+        ShellKind::current(),
+        Duration::from_secs(3),
+    )
 }
 
 fn records_for_socket(dir: &Path, socket_path: &str) -> Vec<(PathBuf, ResumeRecord)> {
@@ -530,6 +590,88 @@ fn quote_powershell(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    struct StartingHerdr {
+        lists: Mutex<usize>,
+        processes: Mutex<usize>,
+        runs: Mutex<usize>,
+    }
+
+    impl HerdrCli for StartingHerdr {
+        fn run_json(&self, args: &[&str]) -> io::Result<String> {
+            match args {
+                ["pane", "list"] => {
+                    let mut calls = self.lists.lock().unwrap();
+                    *calls += 1;
+                    if *calls == 1 {
+                        Ok(r#"{"result":{"panes":[]}}"#.into())
+                    } else {
+                        Ok(r#"{"result":{"panes":[{"pane_id":"w1:p2"}]}}"#.into())
+                    }
+                }
+                ["pane", "process-info", "--pane", "w1:p2"] => {
+                    let mut calls = self.processes.lock().unwrap();
+                    *calls += 1;
+                    if *calls == 1 {
+                        Ok(r#"{"result":{"process_info":{"foreground_process_group_id":43,"shell_pid":42,"foreground_processes":[{"pid":43,"name":"herdr-restore","argv":["/bin/herdr-restore"]}]}}}"#.into())
+                    } else {
+                        Ok(r#"{"result":{"process_info":{"foreground_process_group_id":42,"shell_pid":42,"foreground_processes":[{"pid":42,"name":"fish","argv":["/bin/fish"]}]}}}"#.into())
+                    }
+                }
+                ["pane", "run", "w1:p2", _] => {
+                    *self.runs.lock().unwrap() += 1;
+                    Ok("{}".into())
+                }
+                _ => Err(io::Error::other("unexpected command")),
+            }
+        }
+    }
+
+    #[test]
+    fn startup_waits_for_restored_pane_and_shell_before_running_viewer() {
+        let state = std::env::temp_dir().join(format!(
+            "viewer-resume-startup-{}-{}",
+            std::process::id(),
+            STAGE_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        let registration = register(
+            RuntimeEnv {
+                state_dir: state.clone(),
+                socket_path: "/socket".into(),
+                pane_id: "w1:p2".into(),
+            },
+            LaunchContext {
+                cwd: std::env::temp_dir(),
+                exact_root: false,
+                base_branch: None,
+                workspace_id: None,
+            },
+            state.join("config.toml"),
+        )
+        .unwrap();
+        let host = StartingHerdr {
+            lists: Mutex::new(0),
+            processes: Mutex::new(0),
+            runs: Mutex::new(0),
+        };
+
+        let result = restore_with_timeout(
+            &host,
+            &state,
+            "/socket",
+            Path::new("/viewer"),
+            ShellKind::Posix,
+            Duration::from_secs(1),
+        );
+
+        assert_eq!(result.relaunched, 1);
+        assert_eq!(*host.lists.lock().unwrap(), 2);
+        assert_eq!(*host.processes.lock().unwrap(), 2);
+        assert_eq!(*host.runs.lock().unwrap(), 1);
+        assert!(registration.path().exists());
+        fs::remove_dir_all(state).unwrap();
+    }
 
     #[test]
     fn runtime_requires_the_exact_managed_entrypoint() {

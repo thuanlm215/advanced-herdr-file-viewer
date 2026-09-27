@@ -35,7 +35,16 @@ fn main() -> std::io::Result<()> {
         }
         CliAction::RestorePanes => {
             let host = herdr_file_viewer::herdr::LiveHerdr::from_env();
-            herdr_file_viewer::resume::restore_from_env(&host);
+            let summary = herdr_file_viewer::resume::restore_from_env(&host);
+            if summary != Default::default() {
+                eprintln!(
+                    "viewer pane restore: relaunched={}, already_running={}, stale_removed={}, skipped={}",
+                    summary.relaunched,
+                    summary.already_running,
+                    summary.stale_removed,
+                    summary.skipped
+                );
+            }
             Ok(())
         }
         CliAction::Resume { record } => herdr_file_viewer::run_resumed(&record),

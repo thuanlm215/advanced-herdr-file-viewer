@@ -33,6 +33,8 @@ saved. Closing the viewer normally disarms it, so it does not return at the next
 client detach/reattach does not invoke the hook because the original process stays alive; a live
 handoff also leaves a live viewer alone rather than starting a duplicate. Resume metadata is a
 small, safe-to-delete record in herdr's plugin state directory and contains no file contents.
+At server startup the hook waits up to three seconds for restored panes and shells to become ready.
+Its result is visible with `herdr plugin log list --plugin advanced-herdr-file-viewer`.
 
 Summon it by invoking the action:
 
