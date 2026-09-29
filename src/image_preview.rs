@@ -272,7 +272,14 @@ pub(crate) fn encode_paint(job: ImageEncodeJob) -> Option<Paint> {
             is_tmux,
             font_w,
             font_h,
-        } => Paint::from_kitty_png(&job.image, job.cols, job.rows, is_tmux, font_w, font_h),
+        } => {
+            let mut paint =
+                Paint::from_kitty_png(&job.image, job.cols, job.rows, is_tmux, font_w, font_h)?;
+            if let Paint::KittyPng(png) = &mut paint {
+                png.nonce = job.seq as u8;
+            }
+            Some(paint)
+        }
         ImageEncodeKind::Ratatui(picker) => {
             let img = Arc::try_unwrap(job.image).unwrap_or_else(|shared| (*shared).clone());
             let mut protocol = picker.new_resize_protocol(img);
@@ -301,6 +308,10 @@ pub struct KittyPng {
     id_color: String,
     id_extra: u16,
     transmitted: bool,
+    /// Changes every encode so a same-size replacement still reprints placeholders.
+    /// Ghostty drops every placement when image id 1 is retransmitted; an unchanged
+    /// cell diff would not print them again and the preview would go blank.
+    nonce: u8,
 }
 
 impl KittyPng {
@@ -343,6 +354,7 @@ impl KittyPng {
             id_color: format!("\x1b[38;2;{id_r};{id_g};{id_b}m"),
             id_extra: u16::from(id_extra),
             transmitted: false,
+            nonce: 0,
         })
     }
 
@@ -359,9 +371,11 @@ impl KittyPng {
             self.cols,
             self.rows,
             buf,
-            &self.id_color,
-            self.id_extra,
-            None,
+            PlaceholderPaint {
+                id_color: &self.id_color,
+                id_extra: self.id_extra,
+                nonce: self.nonce,
+            },
         );
     }
 }
@@ -475,6 +489,7 @@ fn kitty_transmit_png(id: u32, png: &[u8], cols: u16, rows: u16, is_tmux: bool) 
     let mut data = String::with_capacity(b64.len() + chunks.len() * 48);
     for (i, chunk) in chunks.iter().enumerate() {
         data.push_str(start);
+        // q=2: no protocol reply on the pane's stdin.
         let _ = write!(data, "{escape}_Gq=2,");
         if i == 0 {
             let _ = write!(data, "i={id},a=T,U=1,f=100,t=d,c={cols},r={rows},");
@@ -494,14 +509,18 @@ fn tmux_wrap(is_tmux: bool) -> (&'static str, &'static str, &'static str) {
     }
 }
 
+struct PlaceholderPaint<'a> {
+    id_color: &'a str,
+    id_extra: u16,
+    nonce: u8,
+}
+
 fn render_placeholders(
     area: Rect,
     size_cols: u16,
     size_rows: u16,
     buf: &mut Buffer,
-    id_color: &str,
-    id_extra: u16,
-    mut seq: Option<&str>,
+    paint: PlaceholderPaint<'_>,
 ) {
     let full_width = area.width.min(size_cols);
     if full_width == 0 {
@@ -517,15 +536,16 @@ fn render_placeholders(
     let mut symbol = String::new();
     for y in 0..height {
         symbol.clear();
-        if let Some(seq) = seq.take() {
-            symbol.push_str(seq);
-        }
+        // `38;5` is overwritten by `id_color` before any glyph, so it never shows.
+        // It only exists so each encode dirties every placeholder row.
         let _ = write!(
             symbol,
-            "\x1b[s{id_color}\u{10EEEE}{}{}{}",
+            "\x1b[38;5;{}m\x1b[s{}\u{10EEEE}{}{}{}",
+            paint.nonce,
+            paint.id_color,
             diacritic(y),
             diacritic(0),
-            diacritic(id_extra)
+            diacritic(paint.id_extra)
         );
         symbol.push_str(&row_diacritics);
         for x in 1..full_width {
@@ -738,6 +758,10 @@ mod tests {
             "must not send uncompressed RGBA"
         );
         assert!(png.transmit.contains("U=1"));
+        assert!(
+            png.transmit.contains("q=2"),
+            "protocol replies would hit stdin"
+        );
         assert!(png.transmit.contains("c="));
         assert!(png.transmit.contains("r="));
         // Uncompressed RGBA for 64x32 would be 8 KiB; PNG+base64 of a solid bitmap is far smaller,
@@ -778,6 +802,58 @@ mod tests {
             "transmit {} bytes",
             png.transmit.len()
         );
+    }
+
+    #[test]
+    fn replacement_nonce_dirties_every_placeholder_row() {
+        let paint = |seq| {
+            let job = ImageEncodeJob {
+                seq,
+                image: Arc::new(DynamicImage::new_rgb8(32, 24)),
+                cols: 40,
+                rows: 12,
+                kind: ImageEncodeKind::KittyPng {
+                    is_tmux: false,
+                    font_w: 10,
+                    font_h: 20,
+                },
+            };
+            encode_paint(job).expect("encode")
+        };
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 12,
+        };
+        let mut first = paint(1);
+        let mut second = paint(2);
+        let mut buf_a = Buffer::empty(area);
+        let mut buf_b = Buffer::empty(area);
+        first.render(area, &mut buf_a);
+        second.render(area, &mut buf_b);
+        let rows_a = placeholder_rows(&buf_a);
+        let rows_b = placeholder_rows(&buf_b);
+        assert!(rows_a.len() > 1, "expected a multi-row placeholder grid");
+        assert_eq!(rows_a.len(), rows_b.len());
+        for (a, b) in rows_a.iter().zip(rows_b.iter()) {
+            assert!(a.contains("\u{1b}[38;5;1m"), "{a}");
+            assert!(b.contains("\u{1b}[38;5;2m"), "{b}");
+            assert_ne!(a, b);
+        }
+    }
+
+    fn placeholder_rows(buf: &Buffer) -> Vec<String> {
+        let mut rows = Vec::new();
+        for y in 0..buf.area.height {
+            for x in 0..buf.area.width {
+                let symbol = buf[(x, y)].symbol();
+                if symbol.contains('\u{10EEEE}') {
+                    rows.push(symbol.to_string());
+                }
+            }
+        }
+        rows
     }
 
     #[test]

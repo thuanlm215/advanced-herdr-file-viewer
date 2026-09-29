@@ -1,7 +1,13 @@
 mod common;
 
-use herdr_file_viewer::controller::clear_kitty_images;
+use herdr_file_viewer::config::ImageProtocol;
+use herdr_file_viewer::controller::{
+    Components, ContentProvider, Controller, EditorHandoff, EditorOutcome, GitService,
+    RenderResult, RootProviders, clear_kitty_images,
+};
+use herdr_file_viewer::git::{Baseline, Status};
 use herdr_file_viewer::image_preview::Paint;
+use herdr_file_viewer::intent::Intent;
 use herdr_file_viewer::presenter::{self, FinderView, Focus, ViewState};
 use herdr_file_viewer::view_policy::{
     FileDescriptor, ViewMode, applicable_modes, default_mode, is_image,
@@ -9,8 +15,10 @@ use herdr_file_viewer::view_policy::{
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::text::Text;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 #[test]
 fn is_image_recognizes_supported_extensions_case_insensitively() {
@@ -160,4 +168,141 @@ fn draw_ok(state: &ViewState) {
 fn clear_kitty_images_runs_safely() {
     // Calling clear_kitty_images shouldn't panic or error
     clear_kitty_images();
+}
+
+/// Image → image must keep the live placement. Dropping it before the next
+/// photo is transmitted is what made herdr retain every previous host image.
+#[test]
+fn switching_images_keeps_the_current_placement_until_the_next_one_replaces_it() {
+    let dir = common::TempDir::new();
+    std::fs::write(dir.path().join("a.png"), b"a").unwrap();
+    std::fs::write(dir.path().join("b.png"), b"b").unwrap();
+    std::fs::write(dir.path().join("c.txt"), b"c").unwrap();
+
+    let mut ctrl = Controller::new(
+        common::resolved(dir.path().to_path_buf(), false),
+        Baseline::Head,
+        Components {
+            providers: Box::new(|_| RootProviders {
+                git: Arc::new(NoGit),
+                content: Box::new(ImageOrText),
+            }),
+            editor: Box::new(NoEditor),
+            clipboard: Box::new(common::RecordingClipboard::default()),
+            renderers: None,
+        },
+    );
+    let picker =
+        herdr_file_viewer::image_preview::init_picker(ImageProtocol::Kitty).expect("kitty picker");
+    ctrl.set_image_picker(picker);
+    ctrl.set_content_viewport(60, 20);
+
+    wait_for(&mut ctrl, "img:a.png");
+    assert!(
+        ctrl.view_state().image.is_some(),
+        "first image should be placed"
+    );
+    let placed = ctrl.view_state().image.clone().unwrap();
+
+    ctrl.handle(Intent::NavDown);
+    let kept = ctrl
+        .view_state()
+        .image
+        .clone()
+        .expect("moving to the next image must keep the current placement");
+    assert!(
+        Arc::ptr_eq(&placed, &kept),
+        "the in-flight switch must not drop the placement"
+    );
+    let body = content_text(&ctrl);
+    assert!(
+        !body.contains("Rendering"),
+        "the text placeholder would stop drawing the image, got {body}"
+    );
+
+    wait_for(&mut ctrl, "img:b.png");
+    assert!(
+        ctrl.view_state().image.is_some(),
+        "the replacement preview should stay placed"
+    );
+
+    ctrl.handle(Intent::NavDown);
+    assert!(
+        ctrl.view_state().image.is_none(),
+        "leaving an image for a non-image still clears the placement"
+    );
+}
+
+fn content_text(ctrl: &Controller) -> String {
+    ctrl.view_state()
+        .content
+        .lines
+        .iter()
+        .map(|line| {
+            line.spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn wait_for(ctrl: &mut Controller, marker: &str) {
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(2) {
+        ctrl.poll();
+        if content_text(ctrl).contains(marker) && ctrl.view_state().image.is_some() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!(
+        "timed out waiting for {marker}; body={}",
+        content_text(ctrl)
+    );
+}
+
+struct ImageOrText;
+impl ContentProvider for ImageOrText {
+    fn render(&self, path: &Path, mode: ViewMode, _: Option<&str>) -> RenderResult {
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if mode == ViewMode::ImageView {
+            return RenderResult {
+                content: Text::raw(format!("img:{name}")),
+                notices: Vec::new(),
+                source: None,
+                image: Some(Arc::new(image::DynamicImage::new_rgb8(8, 8))),
+            };
+        }
+        RenderResult {
+            content: Text::raw(format!("text:{name}")),
+            notices: Vec::new(),
+            source: None,
+            image: None,
+        }
+    }
+}
+
+struct NoGit;
+impl GitService for NoGit {
+    fn status(&self) -> BTreeMap<PathBuf, Status> {
+        BTreeMap::new()
+    }
+    fn changed_set(&self, _: Baseline) -> BTreeMap<PathBuf, Status> {
+        BTreeMap::new()
+    }
+    fn diff(&self, _: &Path, _: Baseline, _: bool) -> String {
+        String::new()
+    }
+    fn diff_directory(&self, _: &Path, _: Baseline) -> String {
+        String::new()
+    }
+}
+
+struct NoEditor;
+impl EditorHandoff for NoEditor {
+    fn open(&mut self, _: &Path) -> EditorOutcome {
+        EditorOutcome::NoTakeover
+    }
 }

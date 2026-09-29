@@ -185,17 +185,23 @@ impl DiffRenderMode {
     }
 }
 
-/// Emit the Kitty graphics protocol escape sequence to delete all visible image placements.
-/// This prevents image ghosting when switching away from an image, resizing, launching an editor,
-/// or exiting the viewer. No-op when stdout is not a tty (so `cargo test` does not dump APC).
+/// Delete Kitty image 1 and free its stored pixels.
+///
+/// `q=2` asks the terminal not to reply — a reply would arrive on the pane's stdin.
+/// Uppercase `d=I` frees the bitmap; lowercase `d=i` only drops placements and leaves
+/// the pixels resident. No-op when stdout is not a tty (so `cargo test` does not dump APC).
+///
+/// Do not call this between two image previews. Herdr's host image id is a content
+/// hash, and it deletes the previous host image only while the same client id stays
+/// placed. Clearing first drops that source without a host delete, so every photo
+/// stays in the outer terminal and later previews stall the whole UI.
 pub fn clear_kitty_images() {
     use std::io::{IsTerminal, Write};
     let mut stdout = std::io::stdout();
     if !stdout.is_terminal() {
         return;
     }
-    let _ = stdout.write_all(b"\x1b_Ga=d,d=i,i=1\x1b\\");
-    let _ = stdout.write_all(b"\x1b_Ga=d,d=a\x1b\\");
+    let _ = stdout.write_all(b"\x1b_Ga=d,d=I,i=1,q=2\x1b\\");
     let _ = stdout.flush();
 }
 
@@ -1517,18 +1523,28 @@ impl Controller {
     }
 
     fn install_image_source(&mut self, img: Option<Arc<image::DynamicImage>>) {
-        self.image_paint = None;
+        let keep_placement =
+            img.is_some() && (self.image_paint.is_some() || self.image_source.is_some());
         self.image_encoded_size = None;
         self.image_pending_size = None;
+        self.image_encode_due = None;
+        // Drop an encode that is still running for the previous bitmap.
         self.image_encode_seq = self.image_encode_seq.wrapping_add(1);
-        if self.image_source.is_some() || img.is_some() {
+        if keep_placement {
+            // The next Kitty PNG reuses image id 1 on top of the live placement.
+            // See [`clear_kitty_images`]: deleting here orphans the previous photo
+            // in the host terminal.
+            self.image_source = img;
+            self.schedule_image_encode();
+            return;
+        }
+        if self.image_paint.is_some() || self.image_source.is_some() {
             self.clear_graphics();
         }
+        self.image_paint = None;
         self.image_source = img;
         if self.image_source.is_some() {
             self.schedule_image_encode();
-        } else {
-            self.image_encode_due = None;
         }
     }
 
@@ -1542,11 +1558,17 @@ impl Controller {
         if self.image_encoded_size == Some(size) || self.image_pending_size == Some(size) {
             return;
         }
-        if self.image_paint.is_some() {
+        // Pane-size changes still clear: the old grid can extend onto a neighbor
+        // until the new encode lands. A bitmap replace at the same size must not
+        // — that gap is what orphaned every previous photo in the host terminal.
+        let size_changed = self
+            .image_encoded_size
+            .is_some_and(|encoded| encoded != size);
+        if size_changed && self.image_paint.is_some() {
             self.clear_graphics();
         }
         self.image_pending_size = Some(size);
-        self.image_encode_due = Some(if self.image_paint.is_none() {
+        self.image_encode_due = Some(if self.image_paint.is_none() || !size_changed {
             Instant::now()
         } else {
             Instant::now() + IMAGE_ENCODE_DEBOUNCE
@@ -3330,10 +3352,17 @@ impl Controller {
             })
             .is_ok()
         {
-            self.clear_image_preview();
-            self.content = Text::raw("Rendering\u{2026}");
-            self.content_notices.clear();
-            self.content_source = None; // the placeholder has no source; the landing render brings its own
+            // Image → image keeps the current placement on screen. Clearing it
+            // (or swapping in the text placeholder, which stops drawing it) makes
+            // herdr drop the host image without deleting it. See `clear_kitty_images`.
+            let keep_image = mode == ViewMode::ImageView
+                && (self.image_paint.is_some() || self.image_source.is_some());
+            if !keep_image {
+                self.clear_image_preview();
+                self.content = Text::raw("Rendering\u{2026}");
+                self.content_notices.clear();
+                self.content_source = None; // the placeholder has no source; the landing render brings its own
+            }
             self.content_rendering = true;
         }
     }

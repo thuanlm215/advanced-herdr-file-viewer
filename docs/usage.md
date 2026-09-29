@@ -191,8 +191,11 @@ non-image file shows its **diff**, a markdown file **renders**, and anything els
   Kitty, Ghostty, or herdr (from the environment), or Unicode 24-bit halfblocks
   with image dimensions (`{width} × {height} px`) and file size. The image is fitted and centered
   in the pane. Files past a 1600 px long edge are transmitted at preview size so a 12 MP photo
-  does not stall herdr; screenshots at or under that stay native. Graphics are cleared when navigating away, the pane size settles after a resize, a
-  modal overlay opens over the image, or an editor is launched. `image_protocol = "off"` shows
+  does not stall herdr; screenshots at or under that stay native. Moving from one image to the
+  next keeps the current preview up until the new one replaces it, so the terminal does not keep
+  every previous photo. Graphics are cleared when leaving an image for a non-image, when the pane
+  size settles after a resize, when a modal overlay opens over the image, or when an editor is
+  launched. `image_protocol = "off"` shows
   only that dimension caption.
 - **Cycle the view** with `v` to override the automatic choice (e.g. see a changed markdown file's
   raw source instead of its diff). On a changed image, `v` steps to the git binary-diff, then the

@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.23.3] - 2026-09-29
+
+### Fixed
+- Browsing images no longer gets slower with each photo or stalls herdr. The current preview stays up until the next image replaces it, so the terminal is not left holding every previous picture. herdr 0.9.2 or later is recommended: it renders Kitty images far cheaper than 0.9.1. → [usage](docs/usage.md#viewing-a-file)
+
 ## [1.23.2] - 2026-09-27
 
 ### Fixed
